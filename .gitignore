@@ -1,0 +1,25 @@
+# Credentials
+.env
+
+# Cookies (session data)
+cookies/
+*.storage.json
+
+# Email output
+emails/
+crm_email_comparison.json
+crm_analysis.json
+crm_leads.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
