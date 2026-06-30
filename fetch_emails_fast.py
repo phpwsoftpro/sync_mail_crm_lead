@@ -62,6 +62,7 @@ OUTLOOK_ACCOUNTS = [
     {"email": e("OUTLOOK_KIEU_EMAIL"), "password": e("OUTLOOK_KIEU_PASSWORD"), "name": e("OUTLOOK_KIEU_NAME", "Kieu"), "storage": "outlook_kieu_storage.json"},
     {"email": e("OUTLOOK_PETER_EMAIL"), "password": e("OUTLOOK_PETER_PASSWORD"), "name": e("OUTLOOK_PETER_NAME", "Peter"), "storage": "outlook_peter_storage.json"},
     {"email": e("OUTLOOK_RUSLAN_EMAIL"), "password": e("OUTLOOK_RUSLAN_PASSWORD"), "name": e("OUTLOOK_RUSLAN_NAME", "Ruslan"), "storage": "outlook_ruslan_storage.json"},
+    {"email": e("OUTLOOK_JAMES_EMAIL"), "password": e("OUTLOOK_JAMES_PASSWORD"), "name": e("OUTLOOK_JAMES_NAME", "James"), "storage": "outlook_james_storage.json"},
 ]
 
 # JS for Gmail email extraction (view=om API)
@@ -227,14 +228,26 @@ def relogin_outlook(playwright_instance, acc):
 
     try:
         page.goto("https://login.live.com/", wait_until="domcontentloaded", timeout=60000)
-        time.sleep(3)
+        time.sleep(5)
 
         print(f"  🔑 Entering email...", flush=True)
-        email_input = page.wait_for_selector('#usernameEntry', state='visible', timeout=30000)
+        email_input = None
+        for sel in ['#usernameEntry', 'input[name="loginfmt"]', '#i0116', 'input[type="email"]']:
+            el = page.query_selector(sel)
+            if el and el.is_visible():
+                email_input = el
+                break
+        if not email_input:
+            email_input = page.wait_for_selector('input[name="loginfmt"]', state='visible', timeout=30000)
         email_input.click()
         time.sleep(0.5)
         page.keyboard.type(email, delay=50)
-        page.keyboard.press("Enter")
+        time.sleep(1)
+        next_btn = page.query_selector('#idSIButton9') or page.query_selector('input[type="submit"]')
+        if next_btn:
+            next_btn.click()
+        else:
+            page.keyboard.press("Enter")
         time.sleep(8)
 
         # Handle passkey prompt
@@ -257,7 +270,12 @@ def relogin_outlook(playwright_instance, acc):
         if pwd_field:
             pwd_field.click(); time.sleep(0.5)
             page.keyboard.type(password, delay=50)
-            page.keyboard.press("Enter")
+            time.sleep(1)
+            submit = page.query_selector('#idSIButton9') or page.query_selector('input[type="submit"]')
+            if submit:
+                submit.click()
+            else:
+                page.keyboard.press("Enter")
         else:
             print(f"  ❌ No password field", flush=True)
             page.close(); ctx.close(); browser2.close()
@@ -270,7 +288,7 @@ def relogin_outlook(playwright_instance, acc):
         body_text = page.evaluate("() => document.body?.innerText || ''")
         if "Stay signed in" in body_text or "Duy trì" in body_text:
             try:
-                yes_btn = page.query_selector('#acceptButton') or page.query_selector('input[value="Yes"]')
+                yes_btn = page.query_selector('#acceptButton') or page.query_selector('#idSIButton9') or page.query_selector('input[value="Yes"]')
                 if yes_btn: yes_btn.click(); time.sleep(5)
             except: pass
 
