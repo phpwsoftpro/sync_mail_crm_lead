@@ -22,6 +22,8 @@ os.makedirs(COOKIES_DIR, exist_ok=True)
 today = datetime.now()
 yesterday = today - timedelta(days=1)
 
+MAX_EMAILS = 500  # Keep max 500 emails per JSON file
+
 STEALTH_JS = "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
 
 # Load .env file
@@ -517,12 +519,14 @@ def main():
                 elapsed = time.time() - t0
                 if emails is not None:
                     out = os.path.join(OUTPUT_DIR, f"gmail_{acc['name'].lower()}_emails.json")
+                    capped = emails[:MAX_EMAILS]
                     with open(out, 'w', encoding='utf-8') as f:
                         json.dump({'account': acc['email'], 'name': acc['name'], 'type': 'gmail',
                                    'date_range': f"{yesterday.strftime('%Y-%m-%d')} to {today.strftime('%Y-%m-%d')}",
                                    'fetched_at': time.strftime('%Y-%m-%d %H:%M:%S'),
-                                   'count': len(emails), 'emails': emails}, f, indent=2, ensure_ascii=False)
-                    print(f"  ✅ {len(emails)} emails → {out} ({elapsed:.0f}s)", flush=True)
+                                   'count': len(capped), 'total_fetched': len(emails),
+                                   'max_emails': MAX_EMAILS, 'emails': capped}, f, indent=2, ensure_ascii=False)
+                    print(f"  ✅ {len(capped)} emails → {out} ({elapsed:.0f}s)", flush=True)
                     results[acc['email']] = f"✅ {len(emails)} emails"
                 else:
                     results[acc['email']] = "❌ failed"
@@ -539,12 +543,14 @@ def main():
                 elapsed = time.time() - t0
                 if emails is not None:
                     out = os.path.join(OUTPUT_DIR, f"outlook_{acc['name'].lower()}_emails.json")
+                    capped = emails[:MAX_EMAILS]
                     with open(out, 'w', encoding='utf-8') as f:
                         json.dump({'account': acc['email'], 'name': acc['name'], 'type': 'outlook',
                                    'date_range': f"{yesterday.strftime('%Y-%m-%d')} to {today.strftime('%Y-%m-%d')}",
                                    'fetched_at': time.strftime('%Y-%m-%d %H:%M:%S'),
-                                   'count': len(emails), 'emails': emails}, f, indent=2, ensure_ascii=False)
-                    print(f"  ✅ {len(emails)} emails → {out} ({elapsed:.0f}s)", flush=True)
+                                   'count': len(capped), 'total_fetched': len(emails),
+                                   'max_emails': MAX_EMAILS, 'emails': capped}, f, indent=2, ensure_ascii=False)
+                    print(f"  ✅ {len(capped)} emails → {out} ({elapsed:.0f}s)", flush=True)
                     results[acc['email']] = f"✅ {len(emails)} emails"
                 else:
                     results[acc['email']] = "❌ failed"
