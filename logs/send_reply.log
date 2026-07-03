@@ -57,3 +57,36 @@ Thank you for getting back to me and for forwarding our information to your inte
 2026-07-03 11:03:12 [INFO] 📋 Found 0 tickets to process
 2026-07-03 11:03:12 [INFO] ✅ No tickets to send!
 2026-07-03 11:04:59 [INFO]    📤 Found OUTGOING thread (fallback — no incoming from client)
+2026-07-03 11:09:38 [INFO] ============================================================
+2026-07-03 11:09:38 [INFO] 📤 CRM Reply Email Sender — 2026-07-03 11:09:38
+2026-07-03 11:09:38 [INFO]    Sender: vanessa@wsoftpro.com
+2026-07-03 11:09:38 [INFO]    Mode: 🤖 AUTO
+2026-07-03 11:09:38 [INFO] ============================================================
+2026-07-03 11:09:38 [INFO] 🔗 Connecting to CRM...
+2026-07-03 11:09:39 [INFO] 📋 Found 1 tickets to process
+2026-07-03 11:09:39 [INFO]   1. [#426490] [Voye] Re: Shopify developer Job application
+2026-07-03 11:09:39 [INFO]      To: support@voyeglobal.com
+2026-07-03 11:09:39 [INFO]      Thread: None
+2026-07-03 11:09:39 [INFO]      Reply: 
+Hi Rashmi,
+Thank you for getting back to me and for forwarding our information to your internal tea...
+2026-07-03 11:09:39 [DEBUG]      Full reply HTML length: 4252
+2026-07-03 11:09:39 [INFO] 📧 Starting Gmail...
+2026-07-03 11:09:42 [INFO] 
+==================================================
+2026-07-03 11:09:42 [INFO] 📧 [1/1] #426490: [Voye] Re: Shopify developer Job application
+2026-07-03 11:09:42 [INFO]    To: support@voyeglobal.com
+2026-07-03 11:09:42 [INFO]    🔍 Searching synced email JSONs for thread...
+2026-07-03 11:09:42 [INFO]    📤 Found OUTGOING thread (fallback — no incoming from client)
+2026-07-03 11:09:42 [INFO]    ✅ JSON match: thread=19f25b771034129e
+2026-07-03 11:09:42 [INFO]       From: gmail_vanessa_emails.json | Shopify developer Job application
+2026-07-03 11:09:42 [INFO]       Date: 3 July 2026 at 09:03 (Delivered after 0 seconds)
+2026-07-03 11:09:42 [DEBUG]       Full match: {"thread_id": "19f25b771034129e", "subject": "Shopify developer Job application", "from": "Vanessa Ha &lt;vanessa@wsoftpro.com&gt;", "to": "support@voyeglobal.com", "date": "3 July 2026 at 09:03 (Delivered after 0 seconds)", "file": "gmail_vanessa_emails.json", "direction": "outgoing"}
+2026-07-03 11:09:42 [DEBUG] Sending reply to support@voyeglobal.com, thread=19f25b771034129e, subject=[Voye] Re: Shopify developer Job application
+2026-07-03 11:10:09 [INFO]    📋 Moving to Follow-up stage...
+2026-07-03 11:10:09 [INFO]    ✅ Moved to Follow-up!
+2026-07-03 11:10:11 [INFO] 
+============================================================
+2026-07-03 11:10:11 [INFO] 📊 Results: 1 sent, 0 failed (33s)
+2026-07-03 11:10:11 [INFO] ============================================================
+2026-07-03 11:14:43 [INFO]    📨 Found INCOMING thread from client domain (no subject match — Zendesk?)

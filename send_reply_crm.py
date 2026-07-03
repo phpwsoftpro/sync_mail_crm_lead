@@ -181,10 +181,12 @@ def search_json_thread(subject, recipient_email):
     # Also extract domain for broader matching (e.g. voyeglobal.com)
     recipient_domain = recipient_lower.split('@')[-1] if '@' in recipient_lower else ''
     
-    incoming_match = None  # FROM client (priority 1)
+    incoming_match = None  # FROM client + subject match (priority 1)
     incoming_date = ''
-    outgoing_match = None  # TO client (priority 2)  
+    outgoing_match = None  # TO client + subject match (priority 2)  
     outgoing_date = ''
+    domain_match = None    # FROM client domain, any subject (priority 3 — for Zendesk)
+    domain_date = ''
     
     for json_file in glob.glob(os.path.join(EMAILS_DIR, '*.json')):
         try:
@@ -200,21 +202,21 @@ def search_json_thread(subject, recipient_email):
                 if not thread_id:
                     continue
                 
+                # Check if this is from/to client
+                is_from_client = (recipient_lower in email_from or 
+                                 (recipient_domain and recipient_domain in email_from))
+                is_to_client = (recipient_lower in email_to or
+                               (recipient_domain and recipient_domain in email_to))
+                
+                if not is_from_client and not is_to_client:
+                    continue
+                
                 # Clean email subject too for comparison
                 clean_email_subj = re.sub(r'^(re:\s*|fwd:\s*|\[.*?\]\s*)*', '', email_subj, flags=re.IGNORECASE).strip()
                 
                 # Subject match: core subject must overlap
                 subj_match = (clean_subj and clean_email_subj and 
                              (clean_subj in clean_email_subj or clean_email_subj in clean_subj))
-                
-                if not subj_match:
-                    continue
-                
-                # Check if this is INCOMING (from client) or OUTGOING (to client)
-                is_from_client = (recipient_lower in email_from or 
-                                 (recipient_domain and recipient_domain in email_from))
-                is_to_client = (recipient_lower in email_to or
-                               (recipient_domain and recipient_domain in email_to))
                 
                 match_info = {
                     'thread_id': thread_id,
@@ -226,25 +228,33 @@ def search_json_thread(subject, recipient_email):
                     'direction': 'incoming' if is_from_client else 'outgoing'
                 }
                 
-                if is_from_client:
-                    # Priority 1: Email FROM the client — this is the thread to reply on
+                if subj_match and is_from_client:
+                    # Priority 1: FROM client + subject match
                     if not incoming_match or email_date > incoming_date:
                         incoming_match = match_info
                         incoming_date = email_date
-                elif is_to_client:
-                    # Priority 2: Email TO the client — our sent email (fallback)
+                elif subj_match and is_to_client:
+                    # Priority 2: TO client + subject match
                     if not outgoing_match or email_date > outgoing_date:
                         outgoing_match = match_info
                         outgoing_date = email_date
+                elif is_from_client and not subj_match:
+                    # Priority 3: FROM client domain, any subject (Zendesk changes subjects)
+                    if not domain_match or email_date > domain_date:
+                        domain_match = match_info
+                        domain_date = email_date
         except Exception as e:
             logger.debug(f'Error reading {json_file}: {e}')
     
-    # Return incoming (from client) first, outgoing (to client) as fallback
+    # Return by priority
     if incoming_match:
-        logger.info(f'   📨 Found INCOMING thread from client')
+        logger.info(f'   📨 Found INCOMING thread from client (subject match)')
         return incoming_match
+    if domain_match:
+        logger.info(f'   📨 Found INCOMING thread from client domain (no subject match — Zendesk?)')
+        return domain_match
     if outgoing_match:
-        logger.info(f'   📤 Found OUTGOING thread (fallback — no incoming from client)')
+        logger.info(f'   📤 Found OUTGOING thread (fallback)')
         return outgoing_match
     return None
 
