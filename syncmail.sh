@@ -2,8 +2,11 @@
 # syncmail - Sync all email accounts + compare with CRM
 # Usage: syncmail          (sync + compare, report only)
 #        syncmail --create (sync + compare + auto-create missing tickets)
+#        syncmail --quick  (sync only, no compare — used by scheduler)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR"
 
 echo "📧 syncmail — Syncing all email accounts..."
 echo ""
@@ -21,6 +24,13 @@ for f in "$SCRIPT_DIR/emails/"*.json; do
 done
 echo ""
 
+# Skip compare in quick mode (used by scheduler)
+if [[ "$1" == "--quick" ]]; then
+    echo "✅ Quick sync done (compare skipped)"
+    exit 0
+fi
+
 echo "🔍 Comparing Gmail emails with CRM pipeline..."
 echo ""
-python3 compare_crm.py "$@"
+# Add 120s timeout to prevent hanging
+timeout 120 python3 compare_crm.py "$@" || echo "⚠️ compare_crm timed out or failed"

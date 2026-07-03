@@ -1,0 +1,50 @@
+2026-07-03 10:43:43 [INFO] ============================================================
+2026-07-03 10:43:43 [INFO] 📤 CRM Reply Email Sender — 2026-07-03 10:43:43
+2026-07-03 10:43:43 [INFO]    Sender: vanessa@wsoftpro.com
+2026-07-03 10:43:43 [INFO]    Mode: 🔴 DRY RUN
+2026-07-03 10:43:43 [INFO] ============================================================
+2026-07-03 10:43:43 [INFO] 🔗 Connecting to CRM...
+2026-07-03 10:43:44 [INFO] 📋 Found 1 tickets to process
+2026-07-03 10:43:44 [INFO]   1. [#426490] [Voye] Re: Shopify developer Job application
+2026-07-03 10:43:44 [INFO]      To: support@voyeglobal.com
+2026-07-03 10:43:44 [INFO]      Thread: None
+2026-07-03 10:43:44 [INFO]      Reply: 
+Hi Rashmi,
+Thank you for getting back to me and for forwarding our information to your internal tea...
+2026-07-03 10:43:44 [DEBUG]      Full reply HTML length: 4252
+2026-07-03 10:43:44 [INFO] ============================================================
+2026-07-03 10:43:44 [INFO] 🔴 DRY RUN — No emails sent. Run with --send or --auto to send.
+2026-07-03 10:43:44 [INFO]    python3 send_reply_crm.py --send
+2026-07-03 10:43:44 [INFO]    python3 send_reply_crm.py --auto  (for scheduled runs)
+2026-07-03 10:43:44 [INFO] ============================================================
+2026-07-03 10:43:52 [INFO] ============================================================
+2026-07-03 10:43:52 [INFO] 📤 CRM Reply Email Sender — 2026-07-03 10:43:52
+2026-07-03 10:43:52 [INFO]    Sender: vanessa@wsoftpro.com
+2026-07-03 10:43:52 [INFO]    Mode: 🤖 AUTO
+2026-07-03 10:43:52 [INFO] ============================================================
+2026-07-03 10:43:52 [INFO] 🔗 Connecting to CRM...
+2026-07-03 10:43:53 [INFO] 📋 Found 1 tickets to process
+2026-07-03 10:43:53 [INFO]   1. [#426490] [Voye] Re: Shopify developer Job application
+2026-07-03 10:43:53 [INFO]      To: support@voyeglobal.com
+2026-07-03 10:43:53 [INFO]      Thread: None
+2026-07-03 10:43:53 [INFO]      Reply: 
+Hi Rashmi,
+Thank you for getting back to me and for forwarding our information to your internal tea...
+2026-07-03 10:43:53 [DEBUG]      Full reply HTML length: 4252
+2026-07-03 10:43:53 [INFO] 📧 Starting Gmail...
+2026-07-03 10:43:54 [INFO] 
+==================================================
+2026-07-03 10:43:54 [INFO] 📧 [1/1] #426490: [Voye] Re: Shopify developer Job application
+2026-07-03 10:43:54 [INFO]    To: support@voyeglobal.com
+2026-07-03 10:43:54 [INFO]    🔍 Searching synced email JSONs for thread...
+2026-07-03 10:43:54 [INFO]    ✅ JSON match: thread=19f25b771034129e
+2026-07-03 10:43:54 [INFO]       From: gmail_vanessa_emails.json | Shopify developer Job application
+2026-07-03 10:43:54 [INFO]       Date: 3 July 2026 at 09:03 (Delivered after 0 seconds)
+2026-07-03 10:43:54 [DEBUG]       Full match: {"thread_id": "19f25b771034129e", "subject": "Shopify developer Job application", "from": "Vanessa Ha &lt;vanessa@wsoftpro.com&gt;", "to": "support@voyeglobal.com", "date": "3 July 2026 at 09:03 (Delivered after 0 seconds)", "file": "gmail_vanessa_emails.json"}
+2026-07-03 10:43:54 [DEBUG] Sending reply to support@voyeglobal.com, thread=19f25b771034129e, subject=[Voye] Re: Shopify developer Job application
+2026-07-03 10:44:22 [INFO]    📋 Moving to Follow-up stage...
+2026-07-03 10:44:22 [INFO]    ✅ Moved to Follow-up!
+2026-07-03 10:44:24 [INFO] 
+============================================================
+2026-07-03 10:44:24 [INFO] 📊 Results: 1 sent, 0 failed (32s)
+2026-07-03 10:44:24 [INFO] ============================================================
