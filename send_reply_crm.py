@@ -138,6 +138,109 @@ def clean_reply_html(html_body):
 
 
 # ============================================================
+# Gmail Thread Search — find original thread ID by subject/recipient
+# ============================================================
+def search_gmail_thread(page, subject, recipient_email):
+    """Search Gmail for the original thread to reply on using Gmail's internal API."""
+    import urllib.parse
+    
+    # Clean subject — remove Re:, Fwd:, [tags]
+    clean_subj = re.sub(r'^(Re:\s*|Fwd:\s*|\[.*?\]\s*)*', '', subject, flags=re.IGNORECASE).strip()
+    
+    # Get Gmail ik token
+    ik = page.evaluate('() => { try { return GLOBALS[9]; } catch(e) { return ""; } }')
+    if not ik:
+        print(f"    🔍 No Gmail ik token", flush=True)
+        return None
+    
+    # Use Gmail internal API to search sent emails
+    search_q = f'in:sent to:{recipient_email} subject:("{clean_subj}")'
+    print(f"    🔍 Searching: \"{clean_subj[:35]}\" to {recipient_email}", flush=True)
+    
+    # Fetch thread list via Gmail API — returns thread IDs
+    thread_id = page.evaluate('''async (args) => {
+        const [ik, query] = args;
+        try {
+            const url = '/mail/u/0/?ik=' + ik + '&view=tl&start=0&num=5&rt=c&q=' + 
+                        encodeURIComponent(query) + '&search=query';
+            const resp = await fetch(url, {credentials: 'include'});
+            const text = await resp.text();
+            
+            // Gmail response contains thread data in arrays
+            // Thread IDs appear as hex strings (16 chars) in the response
+            // Format: ["t","threadHexId", ...]
+            const hexMatches = text.match(/"([0-9a-f]{16})"/g);
+            if (hexMatches && hexMatches.length > 0) {
+                // Return first thread hex ID (strip quotes)
+                return hexMatches[0].replace(/"/g, '');
+            }
+            
+            // Also try to find base64-like thread IDs
+            const b64Matches = text.match(/"(FM[A-Za-z0-9_-]{20,})"/g);
+            if (b64Matches && b64Matches.length > 0) {
+                return b64Matches[0].replace(/"/g, '');
+            }
+            
+            return null;
+        } catch(e) {
+            return null;
+        }
+    }''', [ik, search_q])
+    
+    if thread_id:
+        print(f"    🔍 Thread found (hex): {thread_id}", flush=True)
+        
+        # Convert hex thread ID to Gmail URL thread ID by navigating
+        page.goto(f'https://mail.google.com/mail/u/0/#inbox/{thread_id}', 
+                  wait_until='domcontentloaded', timeout=30000)
+        time.sleep(5)
+        
+        url = page.url
+        m = re.search(r'[#/]([A-Za-z0-9_-]{15,})$', url)
+        if m:
+            url_tid = m.group(1)
+            if url_tid != thread_id:
+                print(f"    🔍 URL thread: {url_tid}", flush=True)
+                return url_tid
+        
+        return thread_id
+    
+    # Broadened search
+    search_q2 = f'in:sent subject:("{clean_subj}")'
+    print(f"    🔍 Broadening search...", flush=True)
+    
+    thread_id2 = page.evaluate('''async (args) => {
+        const [ik, query] = args;
+        try {
+            const url = '/mail/u/0/?ik=' + ik + '&view=tl&start=0&num=5&rt=c&q=' + 
+                        encodeURIComponent(query) + '&search=query';
+            const resp = await fetch(url, {credentials: 'include'});
+            const text = await resp.text();
+            
+            const hexMatches = text.match(/"([0-9a-f]{16})"/g);
+            if (hexMatches && hexMatches.length > 0) {
+                return hexMatches[0].replace(/"/g, '');
+            }
+            return null;
+        } catch(e) { return null; }
+    }''', [ik, search_q2])
+    
+    if thread_id2:
+        print(f"    🔍 Thread found (broad): {thread_id2}", flush=True)
+        page.goto(f'https://mail.google.com/mail/u/0/#inbox/{thread_id2}',
+                  wait_until='domcontentloaded', timeout=30000)
+        time.sleep(5)
+        url = page.url
+        m = re.search(r'[#/]([A-Za-z0-9_-]{15,})$', url)
+        if m:
+            return m.group(1)
+        return thread_id2
+    
+    print(f"    🔍 No thread found", flush=True)
+    return None
+
+
+# ============================================================
 # Gmail Reply Function
 # ============================================================
 def send_gmail_reply(pw_instance, browser, thread_id, to_email, reply_html, subject):
@@ -178,6 +281,15 @@ def send_gmail_reply(pw_instance, browser, thread_id, to_email, reply_html, subj
         if "inbox" not in title.lower() and "mail" not in title.lower() and "hộp thư" not in title.lower():
             print(f"    ❌ Gmail not loaded (title: {title})", flush=True)
             return False
+        
+        # Step 1.5: If no thread_id, search Gmail for the original thread
+        if not thread_id:
+            print(f"    🔍 No thread ID — searching Gmail for original thread...", flush=True)
+            thread_id = search_gmail_thread(page, subject, to_email)
+            if thread_id:
+                print(f"    ✅ Found thread: {thread_id}", flush=True)
+            else:
+                print(f"    ⚠️  No thread found — will send as new email", flush=True)
         
         # Step 2: Open compose URL with thread reference for same-thread reply
         # Encode subject for URL
