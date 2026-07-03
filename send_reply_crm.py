@@ -18,12 +18,38 @@ import time
 import os
 import sys
 import re
+import glob
+import logging
 import requests
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 COOKIES_DIR = os.path.join(SCRIPT_DIR, 'cookies')
+EMAILS_DIR = os.path.join(SCRIPT_DIR, 'emails')
+LOGS_DIR = os.path.join(SCRIPT_DIR, 'logs')
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+# Setup logging — both console and file
+log_file = os.path.join(LOGS_DIR, 'send_reply.log')
+logger = logging.getLogger('send_reply')
+logger.setLevel(logging.DEBUG)
+# File handler — detailed
+fh = logging.FileHandler(log_file, encoding='utf-8')
+fh.setLevel(logging.DEBUG)
+fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+logger.addHandler(fh)
+# Console handler — summary
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+ch.setFormatter(logging.Formatter('%(message)s'))
+logger.addHandler(ch)
+
+def log(msg, level='info'):
+    """Log to both console and file."""
+    getattr(logger, level)(msg)
+    if level == 'info':
+        print(msg, flush=True)
 
 # Load .env
 def load_env():
@@ -59,7 +85,9 @@ STAGE_SEND_EMAIL = 7      # 'Send Email to Client'
 STAGE_FOLLOWUP = 9        # 'Enrich/Follow-up/ Other'
 
 STEALTH_JS = "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
-DRY_RUN = "--send" not in sys.argv
+# --send = send mode, --auto = auto mode (scheduled, always send, no dry run)
+DRY_RUN = "--send" not in sys.argv and "--auto" not in sys.argv
+AUTO_MODE = "--auto" in sys.argv
 
 
 # ============================================================
@@ -135,6 +163,54 @@ def clean_reply_html(html_body):
     # Remove Odoo-specific attributes but keep the HTML structure
     html_body = re.sub(r'\s*data-oe-[a-z-]+="[^"]*"', '', html_body)
     return html_body
+
+
+# ============================================================
+# JSON Thread Search — find thread ID from synced email JSONs
+# ============================================================
+def search_json_thread(subject, recipient_email):
+    """Search synced email JSON files for the original thread by subject/recipient."""
+    # Clean subject for matching
+    clean_subj = re.sub(r'^(Re:\s*|Fwd:\s*|\[.*?\]\s*)*', '', subject, flags=re.IGNORECASE).strip().lower()
+    recipient_lower = recipient_email.lower()
+    
+    best_match = None
+    best_date = ''
+    
+    for json_file in glob.glob(os.path.join(EMAILS_DIR, '*.json')):
+        try:
+            with open(json_file) as f:
+                data = json.load(f)
+            for email in data.get('emails', []):
+                email_subj = (email.get('subject', '') or '').lower()
+                email_to = (email.get('to', '') or '').lower()
+                email_from = (email.get('from', '') or '').lower()
+                email_date = email.get('date', '')
+                thread_id = email.get('thread_id', '')
+                
+                if not thread_id:
+                    continue
+                
+                # Match: same subject sent TO this recipient
+                subj_match = clean_subj in email_subj or email_subj in clean_subj
+                recipient_match = recipient_lower in email_to or recipient_lower in email_from
+                
+                if subj_match and recipient_match:
+                    # Prefer the most recent match
+                    if not best_match or email_date > best_date:
+                        best_match = {
+                            'thread_id': thread_id,
+                            'subject': email.get('subject', ''),
+                            'from': email.get('from', ''),
+                            'to': email.get('to', ''),
+                            'date': email_date,
+                            'file': os.path.basename(json_file)
+                        }
+                        best_date = email_date
+        except Exception as e:
+            logger.debug(f'Error reading {json_file}: {e}')
+    
+    return best_match
 
 
 # ============================================================
@@ -441,22 +517,23 @@ def send_gmail_reply(pw_instance, browser, thread_id, to_email, reply_html, subj
 # MAIN
 # ============================================================
 def main():
-    print("=" * 60)
-    print("📤 CRM Reply Email Sender")
-    print(f"   Sender: {SENDER_EMAIL}")
-    print(f"   Mode: {'🔴 DRY RUN' if DRY_RUN else '🟢 SENDING'}")
-    print("=" * 60)
-    print()
+    start_time = datetime.now()
+    mode_str = '🤖 AUTO' if AUTO_MODE else ('🔴 DRY RUN' if DRY_RUN else '🟢 SENDING')
+    
+    logger.info('=' * 60)
+    logger.info(f'📤 CRM Reply Email Sender — {start_time.strftime("%Y-%m-%d %H:%M:%S")}')
+    logger.info(f'   Sender: {SENDER_EMAIL}')
+    logger.info(f'   Mode: {mode_str}')
+    logger.info('=' * 60)
     
     # 1. Get tickets
-    print("🔗 Connecting to CRM...", flush=True)
+    logger.info('🔗 Connecting to CRM...')
     session = crm_session()
     tickets = fetch_tickets_to_send(session)
-    print(f"📋 Found {len(tickets)} tickets to process", flush=True)
-    print()
+    logger.info(f'📋 Found {len(tickets)} tickets to process')
     
     if not tickets:
-        print("✅ No tickets to send!")
+        logger.info('✅ No tickets to send!')
         return
     
     # Show tickets
@@ -465,21 +542,22 @@ def main():
         to_email = extract_recipient_email(t.get('email_from', ''))
         reply_preview = re.sub(r'<[^>]+>', '', t.get('reply_email', ''))[:100]
         
-        print(f"  {i}. [#{t['id']}] {t['name'][:60]}")
-        print(f"     To: {to_email}")
-        print(f"     Thread: {thread_id}")
-        print(f"     Reply: {reply_preview}...")
-        print()
+        logger.info(f'  {i}. [#{t["id"]}] {t["name"][:60]}')
+        logger.info(f'     To: {to_email}')
+        logger.info(f'     Thread: {thread_id}')
+        logger.info(f'     Reply: {reply_preview}...')
+        logger.debug(f'     Full reply HTML length: {len(t.get("reply_email", ""))}')
     
     if DRY_RUN:
-        print("=" * 60)
-        print("🔴 DRY RUN — No emails sent. Run with --send to actually send.")
-        print("   python3 send_reply_crm.py --send")
-        print("=" * 60)
+        logger.info('=' * 60)
+        logger.info('🔴 DRY RUN — No emails sent. Run with --send or --auto to send.')
+        logger.info('   python3 send_reply_crm.py --send')
+        logger.info('   python3 send_reply_crm.py --auto  (for scheduled runs)')
+        logger.info('=' * 60)
         return
     
     # 2. Send emails via Gmail
-    print("📧 Starting Gmail...", flush=True)
+    logger.info('📧 Starting Gmail...')
     
     sent_count = 0
     failed_count = 0
@@ -496,41 +574,54 @@ def main():
             # Clean subject (remove thread:: part)
             clean_subject = re.sub(r'\s*\[\s*thread::[^\]]*\]', '', subject).strip()
             
-            print(f"\n{'='*50}")
-            print(f"📧 [{i}/{len(tickets)}] #{ticket['id']}: {clean_subject[:50]}")
-            print(f"   To: {to_email}")
+            logger.info(f'\n{"="*50}')
+            logger.info(f'📧 [{i}/{len(tickets)}] #{ticket["id"]}: {clean_subject[:50]}')
+            logger.info(f'   To: {to_email}')
             
+            # Step A: Search JSON files for thread ID
             if not thread_id:
-                print(f"   ℹ️  No thread ID — will send as new email with matching subject")
+                logger.info(f'   🔍 Searching synced email JSONs for thread...')
+                json_match = search_json_thread(clean_subject, to_email)
+                if json_match:
+                    thread_id = json_match['thread_id']
+                    logger.info(f'   ✅ JSON match: thread={thread_id}')
+                    logger.info(f'      From: {json_match["file"]} | {json_match["subject"][:40]}')
+                    logger.info(f'      Date: {json_match["date"]}')
+                    logger.debug(f'      Full match: {json.dumps(json_match)}')
+                else:
+                    logger.info(f'   ℹ️  No thread in JSON — Gmail API will search')
             
             if not to_email:
-                print(f"   ⚠️ No recipient email — skipping")
+                logger.info(f'   ⚠️ No recipient email — skipping')
+                logger.warning(f'Ticket #{ticket["id"]}: No recipient email')
                 failed_count += 1
                 continue
             
             # Send reply
+            logger.debug(f'Sending reply to {to_email}, thread={thread_id}, subject={clean_subject}')
             success = send_gmail_reply(pw, browser, thread_id, to_email, reply_html, clean_subject)
             
             if success:
                 sent_count += 1
                 # Move to follow-up
-                print(f"   📋 Moving to Follow-up stage...", flush=True)
+                logger.info(f'   📋 Moving to Follow-up stage...')
                 if move_to_followup(session, ticket['id']):
-                    print(f"   ✅ Moved to Follow-up!", flush=True)
+                    logger.info(f'   ✅ Moved to Follow-up!')
                 else:
-                    print(f"   ⚠️ Failed to move stage", flush=True)
+                    logger.warning(f'   ⚠️ Failed to move stage for #{ticket["id"]}')
             else:
                 failed_count += 1
-                print(f"   ❌ Failed to send", flush=True)
+                logger.error(f'   ❌ Failed to send #{ticket["id"]} to {to_email}')
             
             # Small delay between sends
             time.sleep(2)
         
         browser.close()
     
-    print(f"\n{'='*60}")
-    print(f"📊 Results: {sent_count} sent, {failed_count} failed")
-    print(f"{'='*60}")
+    elapsed = (datetime.now() - start_time).total_seconds()
+    logger.info(f'\n{"="*60}')
+    logger.info(f'📊 Results: {sent_count} sent, {failed_count} failed ({elapsed:.0f}s)')
+    logger.info(f'{"="*60}')
 
 
 if __name__ == '__main__':

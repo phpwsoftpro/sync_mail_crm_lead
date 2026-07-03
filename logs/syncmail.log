@@ -1,2 +1,95 @@
 📧 syncmail — Syncing all email accounts...
 
+📧 syncmail — 2026-07-02 to 2026-07-03
+============================================================
+
+📧 GMAIL: robert@wsoftpro.com (Robert)
+  ✅ Cookies OK → fetching emails...
+  📊 threads=47, fetched=47
+  ✅ 47 emails → /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/gmail_robert_emails.json (22s)
+
+📧 GMAIL: vanessa@wsoftpro.com (Vanessa)
+  ✅ Cookies OK → fetching emails...
+  📊 threads=100, fetched=100
+  ✅ 100 emails → /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/gmail_vanessa_emails.json (24s)
+
+📧 GMAIL: luna@hyperspacedev.com (Luna)
+  ✅ Cookies OK → fetching emails...
+  📊 threads=51, fetched=51
+  ✅ 51 emails → /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/gmail_luna_emails.json (23s)
+
+📧 GMAIL: helen@interstellarsagency.com (Helen)
+  ✅ Cookies OK → fetching emails...
+  📊 threads=51, fetched=51
+  ✅ 51 emails → /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/gmail_helen_emails.json (21s)
+
+📬 OUTLOOK: travisngx135@outlook.com (Travis)
+  ✅ Cookies OK → fetching emails...
+  📊 Found 7 emails, reading each...
+  ✅ 7 emails → /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/outlook_travis_emails.json (28s)
+
+📬 OUTLOOK: timmy_dao@outlook.com (Timmy)
+  ✅ Cookies OK → fetching emails...
+  📊 Found 8 emails, reading each...
+  ✅ 8 emails → /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/outlook_timmy_emails.json (30s)
+
+📬 OUTLOOK: claytonng159@outlook.com (Clayton)
+  ✅ Cookies OK → fetching emails...
+  📊 Found 8 emails, reading each...
+  ✅ 8 emails → /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/outlook_clayton_emails.json (30s)
+
+📬 OUTLOOK: kieuvt169@outlook.com (Kieu)
+  ✅ Cookies OK → fetching emails...
+  📊 Found 7 emails, reading each...
+  ✅ 7 emails → /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/outlook_kieu_emails.json (31s)
+
+📬 OUTLOOK: petertramvn22@outlook.com (Peter)
+  ✅ Cookies OK → fetching emails...
+  📊 Found 7 emails, reading each...
+  ✅ 7 emails → /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/outlook_peter_emails.json (28s)
+
+📬 OUTLOOK: ruslandevvn123@outlook.com (Ruslan)
+  ✅ Cookies OK → fetching emails...
+  📊 Found 7 emails, reading each...
+  ✅ 7 emails → /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/outlook_ruslan_emails.json (28s)
+
+📬 OUTLOOK: jamesdinh1112@outlook.com (James)
+  ⚠️ Cookies expired (redirected to login)
+  🔑 Opening browser for re-login...
+  🔑 Entering email...
+  🔑 Entering password...
+  ❌ No password field
+
+============================================================
+📊 RESULTS (total: 301s)
+============================================================
+  robert@wsoftpro.com                           | ✅ 47 emails
+  vanessa@wsoftpro.com                          | ✅ 100 emails
+  luna@hyperspacedev.com                        | ✅ 51 emails
+  helen@interstellarsagency.com                 | ✅ 51 emails
+  travisngx135@outlook.com                      | ✅ 7 emails
+  timmy_dao@outlook.com                         | ✅ 8 emails
+  claytonng159@outlook.com                      | ✅ 8 emails
+  kieuvt169@outlook.com                         | ✅ 7 emails
+  petertramvn22@outlook.com                     | ✅ 7 emails
+  ruslandevvn123@outlook.com                    | ✅ 7 emails
+  jamesdinh1112@outlook.com                     | ❌ failed
+
+📁 JSON files: /Users/mac8868/.gemini/antigravity/scratch/syncmail-repo/emails/
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 JSON files:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📄 gmail_helen_emails.json  (51 emails)
+  📄 gmail_luna_emails.json  (51 emails)
+  📄 gmail_robert_emails.json  (47 emails)
+  📄 gmail_vanessa_emails.json  (100 emails)
+  📄 outlook_clayton_emails.json  (8 emails)
+  📄 outlook_kieu_emails.json  (7 emails)
+  📄 outlook_peter_emails.json  (7 emails)
+  📄 outlook_ruslan_emails.json  (7 emails)
+  📄 outlook_timmy_emails.json  (8 emails)
+  📄 outlook_travis_emails.json  (7 emails)
+
+🔍 Comparing Gmail emails with CRM pipeline...
+
