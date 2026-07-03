@@ -22,7 +22,7 @@ os.makedirs(COOKIES_DIR, exist_ok=True)
 today = datetime.now()
 yesterday = today - timedelta(days=1)
 
-MAX_EMAILS = 500  # Keep max 500 emails per JSON file
+MAX_EMAILS = 1000  # Keep max 1000 emails per JSON file
 
 STEALTH_JS = "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
 
