@@ -48,3 +48,12 @@ Thank you for getting back to me and for forwarding our information to your inte
 ============================================================
 2026-07-03 10:44:24 [INFO] 📊 Results: 1 sent, 0 failed (32s)
 2026-07-03 10:44:24 [INFO] ============================================================
+2026-07-03 11:03:10 [INFO] ============================================================
+2026-07-03 11:03:10 [INFO] 📤 CRM Reply Email Sender — 2026-07-03 11:03:10
+2026-07-03 11:03:10 [INFO]    Sender: vanessa@wsoftpro.com
+2026-07-03 11:03:10 [INFO]    Mode: 🤖 AUTO
+2026-07-03 11:03:10 [INFO] ============================================================
+2026-07-03 11:03:10 [INFO] 🔗 Connecting to CRM...
+2026-07-03 11:03:12 [INFO] 📋 Found 0 tickets to process
+2026-07-03 11:03:12 [INFO] ✅ No tickets to send!
+2026-07-03 11:04:59 [INFO]    📤 Found OUTGOING thread (fallback — no incoming from client)

@@ -169,13 +169,22 @@ def clean_reply_html(html_body):
 # JSON Thread Search — find thread ID from synced email JSONs
 # ============================================================
 def search_json_thread(subject, recipient_email):
-    """Search synced email JSON files for the original thread by subject/recipient."""
-    # Clean subject for matching
+    """Search synced email JSON files for the original thread by subject/recipient.
+    
+    Priority: 
+    1. INCOMING email FROM the client (reply we received) — correct thread to reply on
+    2. OUTGOING email TO the client (our sent email) — fallback
+    """
+    # Clean subject: remove Re:, Fwd:, [tags like Voye], etc.
     clean_subj = re.sub(r'^(Re:\s*|Fwd:\s*|\[.*?\]\s*)*', '', subject, flags=re.IGNORECASE).strip().lower()
     recipient_lower = recipient_email.lower()
+    # Also extract domain for broader matching (e.g. voyeglobal.com)
+    recipient_domain = recipient_lower.split('@')[-1] if '@' in recipient_lower else ''
     
-    best_match = None
-    best_date = ''
+    incoming_match = None  # FROM client (priority 1)
+    incoming_date = ''
+    outgoing_match = None  # TO client (priority 2)  
+    outgoing_date = ''
     
     for json_file in glob.glob(os.path.join(EMAILS_DIR, '*.json')):
         try:
@@ -191,26 +200,53 @@ def search_json_thread(subject, recipient_email):
                 if not thread_id:
                     continue
                 
-                # Match: same subject sent TO this recipient
-                subj_match = clean_subj in email_subj or email_subj in clean_subj
-                recipient_match = recipient_lower in email_to or recipient_lower in email_from
+                # Clean email subject too for comparison
+                clean_email_subj = re.sub(r'^(re:\s*|fwd:\s*|\[.*?\]\s*)*', '', email_subj, flags=re.IGNORECASE).strip()
                 
-                if subj_match and recipient_match:
-                    # Prefer the most recent match
-                    if not best_match or email_date > best_date:
-                        best_match = {
-                            'thread_id': thread_id,
-                            'subject': email.get('subject', ''),
-                            'from': email.get('from', ''),
-                            'to': email.get('to', ''),
-                            'date': email_date,
-                            'file': os.path.basename(json_file)
-                        }
-                        best_date = email_date
+                # Subject match: core subject must overlap
+                subj_match = (clean_subj and clean_email_subj and 
+                             (clean_subj in clean_email_subj or clean_email_subj in clean_subj))
+                
+                if not subj_match:
+                    continue
+                
+                # Check if this is INCOMING (from client) or OUTGOING (to client)
+                is_from_client = (recipient_lower in email_from or 
+                                 (recipient_domain and recipient_domain in email_from))
+                is_to_client = (recipient_lower in email_to or
+                               (recipient_domain and recipient_domain in email_to))
+                
+                match_info = {
+                    'thread_id': thread_id,
+                    'subject': email.get('subject', ''),
+                    'from': email.get('from', ''),
+                    'to': email.get('to', ''),
+                    'date': email_date,
+                    'file': os.path.basename(json_file),
+                    'direction': 'incoming' if is_from_client else 'outgoing'
+                }
+                
+                if is_from_client:
+                    # Priority 1: Email FROM the client — this is the thread to reply on
+                    if not incoming_match or email_date > incoming_date:
+                        incoming_match = match_info
+                        incoming_date = email_date
+                elif is_to_client:
+                    # Priority 2: Email TO the client — our sent email (fallback)
+                    if not outgoing_match or email_date > outgoing_date:
+                        outgoing_match = match_info
+                        outgoing_date = email_date
         except Exception as e:
             logger.debug(f'Error reading {json_file}: {e}')
     
-    return best_match
+    # Return incoming (from client) first, outgoing (to client) as fallback
+    if incoming_match:
+        logger.info(f'   📨 Found INCOMING thread from client')
+        return incoming_match
+    if outgoing_match:
+        logger.info(f'   📤 Found OUTGOING thread (fallback — no incoming from client)')
+        return outgoing_match
+    return None
 
 
 # ============================================================
@@ -229,9 +265,9 @@ def search_gmail_thread(page, subject, recipient_email):
         print(f"    🔍 No Gmail ik token", flush=True)
         return None
     
-    # Use Gmail internal API to search sent emails
-    search_q = f'in:sent to:{recipient_email} subject:("{clean_subj}")'
-    print(f"    🔍 Searching: \"{clean_subj[:35]}\" to {recipient_email}", flush=True)
+    # Use Gmail internal API — search INCOMING from client first (correct thread to reply on)
+    search_q = f'from:{recipient_email} subject:("{clean_subj}")'
+    print(f"    🔍 Searching INBOX from {recipient_email}: \"{clean_subj[:35]}\"", flush=True)
     
     # Fetch thread list via Gmail API — returns thread IDs
     thread_id = page.evaluate('''async (args) => {
@@ -281,9 +317,10 @@ def search_gmail_thread(page, subject, recipient_email):
         
         return thread_id
     
-    # Broadened search
-    search_q2 = f'in:sent subject:("{clean_subj}")'
-    print(f"    🔍 Broadening search...", flush=True)
+    # Broadened search: try from client domain
+    recipient_domain = recipient_email.split('@')[-1] if '@' in recipient_email else ''
+    search_q2 = f'from:{recipient_domain} subject:("{clean_subj}")'
+    print(f"    🔍 Broadening: from {recipient_domain}...", flush=True)
     
     thread_id2 = page.evaluate('''async (args) => {
         const [ik, query] = args;
@@ -302,7 +339,7 @@ def search_gmail_thread(page, subject, recipient_email):
     }''', [ik, search_q2])
     
     if thread_id2:
-        print(f"    🔍 Thread found (broad): {thread_id2}", flush=True)
+        print(f"    🔍 Thread found (from domain): {thread_id2}", flush=True)
         page.goto(f'https://mail.google.com/mail/u/0/#inbox/{thread_id2}',
                   wait_until='domcontentloaded', timeout=30000)
         time.sleep(5)
@@ -311,6 +348,37 @@ def search_gmail_thread(page, subject, recipient_email):
         if m:
             return m.group(1)
         return thread_id2
+    
+    # Last resort: search in sent
+    search_q3 = f'in:sent to:{recipient_email} subject:("{clean_subj}")'
+    print(f"    🔍 Last resort: in:sent...", flush=True)
+    
+    thread_id3 = page.evaluate('''async (args) => {
+        const [ik, query] = args;
+        try {
+            const url = '/mail/u/0/?ik=' + ik + '&view=tl&start=0&num=5&rt=c&q=' + 
+                        encodeURIComponent(query) + '&search=query';
+            const resp = await fetch(url, {credentials: 'include'});
+            const text = await resp.text();
+            
+            const hexMatches = text.match(/"([0-9a-f]{16})"/g);
+            if (hexMatches && hexMatches.length > 0) {
+                return hexMatches[0].replace(/"/g, '');
+            }
+            return null;
+        } catch(e) { return null; }
+    }''', [ik, search_q3])
+    
+    if thread_id3:
+        print(f"    🔍 Thread found (sent): {thread_id3}", flush=True)
+        page.goto(f'https://mail.google.com/mail/u/0/#inbox/{thread_id3}',
+                  wait_until='domcontentloaded', timeout=30000)
+        time.sleep(5)
+        url = page.url
+        m = re.search(r'[#/]([A-Za-z0-9_-]{15,})$', url)
+        if m:
+            return m.group(1)
+        return thread_id3
     
     print(f"    🔍 No thread found", flush=True)
     return None
