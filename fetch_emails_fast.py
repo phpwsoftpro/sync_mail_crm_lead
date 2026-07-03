@@ -67,12 +67,8 @@ OUTLOOK_ACCOUNTS = [
     {"email": e("OUTLOOK_JAMES_EMAIL"), "password": e("OUTLOOK_JAMES_PASSWORD"), "name": e("OUTLOOK_JAMES_NAME", "James"), "storage": "outlook_james_storage.json"},
 ]
 
-# JS for Gmail email extraction (view=om API)
-GMAIL_FETCH_JS = '''async () => {
-    let ik = '';
-    try { ik = GLOBALS[9]; } catch(e) {}
-    if (!ik) return { error: 'no ik', emails: [] };
-    
+# JS to extract thread IDs from visible Gmail rows
+GMAIL_EXTRACT_THREADS_JS = '''() => {
     const rows = document.querySelectorAll('tr.zA');
     const threadIds = [];
     for (const row of rows) {
@@ -84,19 +80,28 @@ GMAIL_FETCH_JS = '''async () => {
                 const tidMatch = decoded.match(/thread-[fa]:(\\w+)/);
                 if (tidMatch) {
                     const hexId = BigInt(tidMatch[1]).toString(16);
-                    threadIds.push({ hexId });
+                    threadIds.push(hexId);
                 }
             } catch(e) {}
         }
     }
+    return threadIds;
+}'''
+
+# JS to batch-fetch email content by thread IDs
+GMAIL_FETCH_CONTENT_JS = '''async (args) => {
+    const [threadHexIds, startIdx] = args;
+    let ik = '';
+    try { ik = GLOBALS[9]; } catch(e) {}
+    if (!ik) return { error: 'no ik', emails: [] };
     
     const results = [];
     const batchSize = 10;
-    for (let b = 0; b < threadIds.length; b += batchSize) {
-        const batch = threadIds.slice(b, b + batchSize);
-        const promises = batch.map(async (t, idx) => {
+    for (let b = 0; b < threadHexIds.length; b += batchSize) {
+        const batch = threadHexIds.slice(b, b + batchSize);
+        const promises = batch.map(async (hexId, idx) => {
             try {
-                const url = '/mail/u/0/?ui=2&ik=' + ik + '&view=om&th=' + t.hexId;
+                const url = '/mail/u/0/?ui=2&ik=' + ik + '&view=om&th=' + hexId;
                 const resp = await fetch(url, {credentials: 'include'});
                 const html = await resp.text();
                 
@@ -124,17 +129,17 @@ GMAIL_FETCH_JS = '''async () => {
                     .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
                     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\\s+/g, ' ').trim();
                 
-                return { index: b + idx + 1, thread_id: t.hexId, from: from_, to, date, subject,
+                return { index: startIdx + b + idx + 1, thread_id: hexId, from: from_, to, date, subject,
                          message_id: messageId,
                          body_text: bodyText.substring(0, 30000), body_html: bodyHtml.substring(0, 50000) };
             } catch(e) {
-                return { index: b + idx + 1, thread_id: t.hexId, error: e.message };
+                return { index: startIdx + b + idx + 1, thread_id: hexId, error: e.message };
             }
         });
         const batchResults = await Promise.all(promises);
         results.push(...batchResults);
     }
-    return { ik, threadCount: threadIds.length, emails: results };
+    return { emails: results };
 }'''
 
 results = {}
@@ -363,11 +368,41 @@ def process_gmail(pw, browser, acc):
         
         print(f"  ✅ Cookies OK → fetching emails...", flush=True)
         
-        # Fetch emails
-        all_emails = page.evaluate(GMAIL_FETCH_JS)
-        emails = all_emails.get('emails', [])
-        total = all_emails.get('threadCount', 0)
-        print(f"  📊 threads={total}, fetched={len(emails)}", flush=True)
+        # Collect thread IDs across multiple pages
+        all_thread_ids = []
+        page_num = 1
+        max_pages = (MAX_EMAILS // 50) + 2  # ~50 threads per page
+        
+        while len(all_thread_ids) < MAX_EMAILS and page_num <= max_pages:
+            tids = page.evaluate(GMAIL_EXTRACT_THREADS_JS)
+            new_tids = [t for t in tids if t not in all_thread_ids]
+            if not new_tids:
+                break
+            all_thread_ids.extend(new_tids)
+            print(f"  📄 Page {page_num}: +{len(new_tids)} threads (total: {len(all_thread_ids)})", flush=True)
+            
+            if len(all_thread_ids) >= MAX_EMAILS:
+                break
+            
+            # Click 'Older' button to go to next page
+            older_btn = page.query_selector('div[aria-label="Older"], div[aria-label="Cũ hơn"]')
+            if not older_btn:
+                break
+            try:
+                older_btn.click()
+                time.sleep(5)
+                page_num += 1
+            except:
+                break
+        
+        # Cap at MAX_EMAILS
+        all_thread_ids = all_thread_ids[:MAX_EMAILS]
+        print(f"  📊 Total threads: {len(all_thread_ids)}, fetching content...", flush=True)
+        
+        # Batch-fetch content
+        all_emails_result = page.evaluate(GMAIL_FETCH_CONTENT_JS, [all_thread_ids, 0])
+        emails = all_emails_result.get('emails', [])
+        print(f"  📊 threads={len(all_thread_ids)}, fetched={len(emails)}", flush=True)
         return emails
 
     except Exception as e:
@@ -502,6 +537,48 @@ def process_outlook(pw, browser, acc):
 # ============================================================
 # MAIN
 # ============================================================
+def merge_and_save(new_emails, out_path, acc_email, acc_name, acc_type):
+    """Merge new emails with existing JSON, dedupe by thread_id, cap at MAX_EMAILS."""
+    existing = []
+    old_count = 0
+    if os.path.exists(out_path):
+        try:
+            with open(out_path, 'r', encoding='utf-8') as f:
+                old_data = json.load(f)
+            existing = old_data.get('emails', [])
+            old_count = len(existing)
+        except:
+            pass
+    
+    # Build a map: thread_id -> email (new emails override old)
+    email_map = {}
+    for e in existing:
+        tid = e.get('thread_id', '')
+        if tid:
+            email_map[tid] = e
+    
+    new_count = 0
+    for e in new_emails:
+        tid = e.get('thread_id', '')
+        if tid and tid not in email_map:
+            new_count += 1
+        if tid:
+            email_map[tid] = e  # New overrides old
+    
+    # Sort by index (newest first) and cap
+    merged = list(email_map.values())[:MAX_EMAILS]
+    
+    with open(out_path, 'w', encoding='utf-8') as f:
+        json.dump({
+            'account': acc_email, 'name': acc_name, 'type': acc_type,
+            'fetched_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'count': len(merged), 'new_emails': new_count, 'old_emails': old_count,
+            'max_emails': MAX_EMAILS, 'emails': merged
+        }, f, indent=2, ensure_ascii=False)
+    
+    return len(merged), new_count
+
+
 def main():
     print(f"📧 syncmail — {yesterday.strftime('%Y-%m-%d')} to {today.strftime('%Y-%m-%d')}")
     print(f"{'='*60}\n")
@@ -519,15 +596,9 @@ def main():
                 elapsed = time.time() - t0
                 if emails is not None:
                     out = os.path.join(OUTPUT_DIR, f"gmail_{acc['name'].lower()}_emails.json")
-                    capped = emails[:MAX_EMAILS]
-                    with open(out, 'w', encoding='utf-8') as f:
-                        json.dump({'account': acc['email'], 'name': acc['name'], 'type': 'gmail',
-                                   'date_range': f"{yesterday.strftime('%Y-%m-%d')} to {today.strftime('%Y-%m-%d')}",
-                                   'fetched_at': time.strftime('%Y-%m-%d %H:%M:%S'),
-                                   'count': len(capped), 'total_fetched': len(emails),
-                                   'max_emails': MAX_EMAILS, 'emails': capped}, f, indent=2, ensure_ascii=False)
-                    print(f"  ✅ {len(capped)} emails → {out} ({elapsed:.0f}s)", flush=True)
-                    results[acc['email']] = f"✅ {len(emails)} emails"
+                    total, new = merge_and_save(emails, out, acc['email'], acc['name'], 'gmail')
+                    print(f"  ✅ {total} emails ({new} new) → {out} ({elapsed:.0f}s)", flush=True)
+                    results[acc['email']] = f"✅ {total} emails ({new} new)"
                 else:
                     results[acc['email']] = "❌ failed"
             except Exception as e:
@@ -543,15 +614,9 @@ def main():
                 elapsed = time.time() - t0
                 if emails is not None:
                     out = os.path.join(OUTPUT_DIR, f"outlook_{acc['name'].lower()}_emails.json")
-                    capped = emails[:MAX_EMAILS]
-                    with open(out, 'w', encoding='utf-8') as f:
-                        json.dump({'account': acc['email'], 'name': acc['name'], 'type': 'outlook',
-                                   'date_range': f"{yesterday.strftime('%Y-%m-%d')} to {today.strftime('%Y-%m-%d')}",
-                                   'fetched_at': time.strftime('%Y-%m-%d %H:%M:%S'),
-                                   'count': len(capped), 'total_fetched': len(emails),
-                                   'max_emails': MAX_EMAILS, 'emails': capped}, f, indent=2, ensure_ascii=False)
-                    print(f"  ✅ {len(capped)} emails → {out} ({elapsed:.0f}s)", flush=True)
-                    results[acc['email']] = f"✅ {len(emails)} emails"
+                    total, new = merge_and_save(emails, out, acc['email'], acc['name'], 'outlook')
+                    print(f"  ✅ {total} emails ({new} new) → {out} ({elapsed:.0f}s)", flush=True)
+                    results[acc['email']] = f"✅ {total} emails ({new} new)"
                 else:
                     results[acc['email']] = "❌ failed"
             except Exception as e:
