@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Sender chính thức, DUY NHẤT, của hệ thống (2026-09-15, theo yêu cầu Trung):
+         ticket vào "Send Email to Client" (7) -> trong <=5 phút tự gửi cho khách, đúng thread
+         (reply vào [thread::id] trong tên ticket). reply_email -> Send Email Done (35),
+         follow_up_x1/x2 -> Done Follow Up 1/2. Thay cho cron dry-run và sender cũ trên mac8868. -->
+    <key>Label</key>
+    <string>com.syncmail.sendreply</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/trung/syncmail-repo-auto/venv/bin/python</string>
+        <string>/Users/trung/syncmail-repo-auto/send_reply_crm.py</string>
+        <string>--auto</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/trung/syncmail-repo-auto</string>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/send_reply.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/send_reply.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/Users/trung/.local/bin</string>
+    </dict>
+</dict>
+</plist>

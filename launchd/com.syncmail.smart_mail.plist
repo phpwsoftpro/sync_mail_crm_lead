@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Inbound triage (smart_mail_daemon.py via run_smart_mail.sh) every 5 min.
+         Moved from crontab to launchd on 2026-09-15 after the user crontab was wiped;
+         RunAtLoad replaces the old "@reboot sleep 90" entry. Single instance is guaranteed
+         by the flock inside smart_mail_daemon.py. -->
+    <key>Label</key>
+    <string>com.syncmail.smart_mail</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/trung/syncmail-repo-auto/run_smart_mail.sh</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/trung/syncmail-repo-auto</string>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/smart_mail_launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/smart_mail_launchd.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/Users/trung/.local/bin</string>
+    </dict>
+</dict>
+</plist>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- full_sync_reconciler.py hourly (parity with the old "0 * * * *" crontab entry).
+         Moved to launchd 2026-09-15. NOTE: this script is the main source of duplicate leads
+         (see docs/REQUIREMENTS.md open items) — trung still has to decide whether to gate or
+         retire it; until then it runs exactly as before. -->
+    <key>Label</key>
+    <string>com.syncmail.full_sync</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/trung/syncmail-repo-auto/venv/bin/python</string>
+        <string>/Users/trung/syncmail-repo-auto/full_sync_reconciler.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/trung/syncmail-repo-auto</string>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/tmp/full_sync_reconciler.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/full_sync_reconciler.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/Users/trung/.local/bin</string>
+    </dict>
+</dict>
+</plist>
