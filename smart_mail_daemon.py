@@ -250,6 +250,22 @@ def post_email_to_chatter(session, lead_id, sender, subject, body_text, body_htm
     # `date`, so: post (gets the id) -> write the real HTML body + the email's timestamp.
     html = clean_html_body(body_html)
     body = html if html else (body_text or "(no content)")
+    # Odoo fetchmail usually posts the same mail into the chatter first (uid 1). If an email
+    # message with this exact timestamp already exists on the lead, don't post a duplicate —
+    # the caller still does the routing (rescue/tag) based on the classification.
+    if date_utc:
+        try:
+            dup = session.post(f"{ODOO_CRM_URL}/web/dataset/call_kw/mail.message/search_count", json={
+                "jsonrpc": "2.0", "method": "call",
+                "params": {"model": "mail.message", "method": "search_count",
+                           "args": [[["model", "=", "crm.lead"], ["res_id", "=", lead_id],
+                                     ["message_type", "=", "email"], ["date", "=", date_utc]]], "kwargs": {}}
+            }, timeout=15).json().get("result", 0)
+            if dup:
+                print(f"  chatter: email dated {date_utc} already on #{lead_id} (fetchmail) — not re-posting")
+                return True
+        except Exception as e:
+            print(f"  chatter dedupe check failed for #{lead_id}: {e} — posting anyway")
     try:
         r = session.post(f"{ODOO_CRM_URL}/web/dataset/call_kw/crm.lead/message_post", json={
             "jsonrpc": "2.0", "method": "call",
@@ -676,7 +692,11 @@ def process_inbox(account, processed):
         # "newer_than:1h" + maxResults=10 combination silently dropped mail whenever
         # >10 unread piled up — processed mail is never marked read, so it kept
         # occupying the 10 slots until the unprocessed ones aged out of the window.
-        query = "is:unread newer_than:2d"
+        # 2026-09-15: dropped `is:unread`. Odoo's own fetchmail (IMAP) marks mails SEEN within
+        # minutes of arrival, so an unread-only query silently skipped every client reply that
+        # fetchmail (or a human) opened first (#462037: two VESLOG replies never seen by this
+        # daemon, ticket stuck in Send Email Done). Dedupe relies on the processed-id file instead.
+        query = "newer_than:2d"
         messages = []
         page_token = None
         while True:
