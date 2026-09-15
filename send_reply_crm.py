@@ -579,9 +579,24 @@ def send_api_reply(thread_id, to_email, reply_html, subject, sender_email=None):
             return 'thread_not_found'
             
         print(f"    📧 Replying to thread {thread_id}...", flush=True)
-        gmail_api_client.send_reply(service, thread_id, to_email, subject, reply_html, sender_email)
-        print(f"    ✅ Email sent via API!", flush=True)
-        return 'sent'
+        # 2026-09-15: a transient Gmail timeout on the account that OWNS the thread used to
+        # fall through to the other personas (all 404 on a foreign thread id) and park the
+        # ticket in "Unable to Send Email". Retry the same account once before giving up.
+        last_err = None
+        for attempt in (1, 2):
+            try:
+                gmail_api_client.send_reply(service, thread_id, to_email, subject, reply_html, sender_email)
+                print(f"    ✅ Email sent via API!", flush=True)
+                return 'sent'
+            except Exception as e:
+                last_err = e
+                msg = str(e).lower()
+                if attempt == 1 and ("timed out" in msg or "timeout" in msg or "connection" in msg):
+                    print(f"    ⏳ Gmail timeout via {sender_email}, retrying once...", flush=True)
+                    time.sleep(3)
+                    continue
+                raise
+        raise last_err
     except Exception as e:
         print(f"    ❌ Error sending via API: {str(e)[:200]}", flush=True)
         return 'error'
