@@ -29,7 +29,7 @@ Playbook vận hành chi tiết: `~/.claude/skills/wsoftpro-mail-crm/SKILL.md`.
 16. Daemon chỉ gắn tag khi ticket **chưa có** tag nguồn.
 
 ## 5. Gửi mail (outbound) — `send_reply_crm.py`
-17. Cột **Send Email to Client (7)** phải **tự gửi**: cron Mac 32 chạy `send_reply_crm.py --auto` mỗi 10 phút (Trung đã duyệt 14/09; chính Trung thêm `--auto` vào crontab vì shell agent bị chặn ghi crontab). Không có sender thứ hai (orchestrator Mac 10 đã dừng từ 03/09).
+17. Cột **Send Email to Client (7)** phải **tự gửi**: cron Mac 32 chạy `send_reply_crm.py --auto` mỗi 10 phút (Trung đã duyệt 14/09; chính Trung thêm `--auto` vào crontab vì shell agent bị chặn ghi crontab). **Chỉ một sender duy nhất.** Sender thứ hai từng tồn tại là launchd `com.wsoftpro.sendreply` trên mac8868 (bản cũ 07/08, `STAGE_FOLLOWUP = 9` → đẩy cả reply vào Done Follow Up 1) — đã tắt 15/09; không bao giờ bật lại bản cũ đó.
 18. Persona gửi: cache JSON → `user_id` của ticket (pin) → tên/email persona trong draft hoặc mail đầu → Vanessa mặc định; gửi từ hộp có thread. Pin persona bằng `crm_lead.user_id` (Vanessa 25, Robert 34).
 19. Ticket ở cột 7 mà **không có nội dung** (vd #431213) → không gửi, cần kéo ra xử lý tay.
 
