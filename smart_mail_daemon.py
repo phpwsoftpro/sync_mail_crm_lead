@@ -335,6 +335,10 @@ AGY_BIN = os.path.expanduser("~/.local/bin/agy")
 AGY_MODEL = "gemini-3.1-pro-high"
 AGY_TIMEOUT_S = 60
 AGY_MAX_CALLS_PER_RUN = 24        # ~8–10 min worst case; mail beyond this is DEFERRED to the next run, never keyword-classified
+PER_INBOX_NEW_CAP = 8             # max NEW (unprocessed) mails fetched per inbox per run — Gmail lists newest first,
+                                  # so fresh replies always go first; the 2-day backlog drains over successive runs
+                                  # (added 2026-09-15 with the `newer_than:2d` query: without caps one run fetched
+                                  # hundreds of full messages and hit 60 s Gmail timeouts)
 AGY_BODY_MAX_CHARS = 15000        # "full content" for the model, with a sanity cap for giant newsletters
 DEFER = "DEFER"
 _agy_calls = 0
@@ -711,13 +715,25 @@ def process_inbox(account, processed):
             return results
         
         crm_session = get_crm_session()
-        
+        new_fetched = 0
+
         for msg_meta in messages:
             msg_id = msg_meta["id"]
 
             # Skip if already processed
             if msg_id in processed:
                 continue
+
+            # Budget guards BEFORE the expensive full fetch: once this run can no longer
+            # classify (agy budget spent) or this inbox has had its share, leave the rest
+            # unprocessed for the next 5-minute cycle instead of fetching it for nothing.
+            if _agy_calls >= AGY_MAX_CALLS_PER_RUN:
+                print(f"  agy budget exhausted — leaving the rest of {account} for the next run")
+                break
+            if new_fetched >= PER_INBOX_NEW_CAP:
+                print(f"  per-inbox cap {PER_INBOX_NEW_CAP} reached — leaving the rest of {account} for the next run")
+                break
+            new_fetched += 1
 
             # Per-message guard: previously the ONLY try/except wrapping this
             # work was the one around the whole account loop (below), so one
