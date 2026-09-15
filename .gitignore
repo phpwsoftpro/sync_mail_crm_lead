@@ -18,6 +18,26 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Secrets / service-account keys (never commit)
+credentials/
+*.pem
+*.key
+
+# Runtime state & logs (contain client email content)
+logs/
+*.log
+.smart_mail_processed.json
+.agy_processed.json
+.full_sync_processed.json
+*.lock
+
+# Review artifacts (agent audits, plans, patches — may quote client data / config lines)
+_review_*/
+
+# Agent scratch
+.agents/
+__pycache__/
 Thumbs.db
 
 # IDE

@@ -86,6 +86,7 @@ STAGE_REPLY_CLIENT = 3
 STAGE_FOLLOWUP_X1 = 9
 STAGE_DONE_FOLLOWUP = 10
 STAGE_TRUNG_CHECK = 5
+STAGE_OLD_LEAD_FOLLOWUP = 34   # "Old Lead cần Follow-up" — workflow #462027 §2 (Bot Cảnh Sát)
 
 DRY_RUN = "--send" not in sys.argv and "--auto" not in sys.argv
 AUTO_MODE = "--auto" in sys.argv
@@ -100,6 +101,22 @@ def detect_sender_from_reply(reply_html):
     for email, acct in GMAIL_ACCOUNTS.items():
         domain = email.split('@')[-1]
         if domain.lower() in reply_lower and domain != 'wsoftpro.com':
+            return email
+    return None
+
+def detect_sender_from_name_mention(text):
+    """Catch cases like the client writing 'Hello Helen' — a bare first-name
+    mention with no email/domain, which detect_sender_from_reply misses.
+    Bug found on lead #434380: client only ever addressed 'Helen', so both
+    the email/domain check above AND the user_id check failed, and the
+    script silently fell back to DEFAULT_SENDER (Vanessa), confusing the
+    client mid-thread ("Who is Vanessa Ha?")."""
+    if not text:
+        return None
+    plain = re.sub(r'<[^>]+>', ' ', text)
+    for email, acct in GMAIL_ACCOUNTS.items():
+        name = acct.get('name', '')
+        if name and re.search(r'\b' + re.escape(name) + r'\b', plain, re.IGNORECASE):
             return email
     return None
 
@@ -266,6 +283,44 @@ def fetch_tickets_to_send(session):
     })
     return res.json().get("result", [])
 
+def fetch_first_inbound_body(session, lead_id):
+    """Fetch the client's earliest inbound email body on this lead, so name
+    mentions like 'Hello Helen' can be checked even when the outgoing draft
+    itself doesn't repeat that name."""
+    try:
+        res = session.post(f"{CRM_URL}/web/dataset/call_kw/mail.message/search_read", json={
+            "jsonrpc": "2.0", "method": "call",
+            "params": {
+                "model": "mail.message", "method": "search_read",
+                "args": [[["model", "=", "crm.lead"], ["res_id", "=", lead_id], ["message_type", "=", "email"]]],
+                "kwargs": {"fields": ["body"], "order": "date asc", "limit": 1}
+            }
+        }, timeout=10)
+        results = res.json().get("result", [])
+        if results:
+            return results[0].get("body") or ""
+    except Exception as e:
+        logger.debug(f"Could not fetch inbound body for lead {lead_id}: {e}")
+    return ""
+
+def post_sender_warning(session, lead_id, used_sender):
+    try:
+        session.post(f"{CRM_URL}/web/dataset/call_kw/crm.lead/message_post", json={
+            "jsonrpc": "2.0", "method": "call",
+            "params": {
+                "model": "crm.lead", "method": "message_post",
+                "args": [[lead_id]],
+                "kwargs": {
+                    "body": (f"⚠️ Auto-reply: không xác định được persona gốc (Helen/Luna/Robert/Vanessa) "
+                             f"khách đã từng liên hệ — đã gửi tạm bằng {used_sender}. "
+                             f"Vui lòng kiểm tra lại đúng người khách từng làm việc cùng."),
+                    "message_type": "comment",
+                }
+            }
+        }, timeout=10)
+    except Exception as e:
+        logger.debug(f"Could not post sender warning note for lead {lead_id}: {e}")
+
 def move_to_stage(session, lead_id, stage_id):
     res = session.post(f"{CRM_URL}/web/dataset/call_kw/crm.lead/write", json={
         "jsonrpc": "2.0", "method": "call",
@@ -293,25 +348,41 @@ def clear_email_field(session, lead_id, field_name):
     except:
         pass
 
+def is_field_filled(html_str):
+    if not html_str: return False
+    clean = re.sub(r'<[^>]+>', '', html_str).strip()
+    if clean: return True
+    if '<img' in html_str.lower(): return True
+    if '<a ' in html_str.lower(): return True
+    return False
+
 def detect_email_field(ticket):
     reply = ticket.get('reply_email') or ''
     fu1 = ticket.get('follow_up_x1') or ''
     fu2 = ticket.get('follow_up_x2') or ''
-    reply_clean = re.sub(r'<[^>]+>', '', reply).strip() if reply else ''
-    fu1_clean = re.sub(r'<[^>]+>', '', fu1).strip() if fu1 else ''
-    fu2_clean = re.sub(r'<[^>]+>', '', fu2).strip() if fu2 else ''
-    if reply_clean:
+    
+    if is_field_filled(reply):
         return ('reply_email', reply, STAGE_FOLLOWUP, 'Send Email Done')
-    elif fu1_clean:
+    elif is_field_filled(fu1):
         return ('follow_up_x1', fu1, STAGE_FOLLOWUP_X1, 'Done Follow Up 1')
-    elif fu2_clean:
+    elif is_field_filled(fu2):
         return ('follow_up_x2', fu2, STAGE_DONE_FOLLOWUP, 'Done Follow Up 2')
     else:
         return (None, None, None, None)
 
 def check_followup_x1_stale(session):
+    # 2026-09-15 (trung): this 10-minute bot moved silent tickets to "Old Lead cần Follow-up" (34),
+    # a column nobody worked. Replaced by followup_reminder.py (daily 08:00 VN, launchd
+    # com.syncmail.followup_reminder) which moves them to Reply Client (3) instead. Kept the
+    # function for reference; disabled so the two bots don't fight over the same tickets.
+    return 0
     from datetime import timedelta
-    three_days_ago = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S")
+    # Odoo stores/queries Datetime fields (date_last_stage_update) in UTC; a
+    # naive "YYYY-MM-DD HH:MM:SS" string in a search domain is interpreted as
+    # UTC by the ORM. This machine's local time is Asia/Ho_Chi_Minh (UTC+7),
+    # so building the threshold from datetime.now() shifted the effective
+    # "3 days" cutoff by ~7 hours. Use UTC to match Odoo's own convention.
+    three_days_ago = (datetime.utcnow() - timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S")
     res = session.post(f"{CRM_URL}/web/dataset/call_kw/crm.lead/search_read", json={
         "jsonrpc": "2.0", "method": "call",
         "params": {
@@ -335,8 +406,8 @@ def check_followup_x1_stale(session):
     for t in stale_tickets:
         tid = t['id']
         tname = t.get('name', '')
-        logger.info(f'   ⏰ #{tid} {tname[:40]} — stale > 3 days, moving to Reply Client')
-        if move_to_stage(session, tid, STAGE_REPLY_CLIENT):
+        logger.info(f'   ⏰ #{tid} {tname[:40]} — no client reply > 3 days, moving to Old Lead cần Follow-up')
+        if move_to_stage(session, tid, STAGE_OLD_LEAD_FOLLOWUP):
             try:
                 session.post(f"{CRM_URL}/web/dataset/call_kw/crm.lead/message_post", json={
                     "jsonrpc": "2.0", "method": "call",
@@ -344,7 +415,8 @@ def check_followup_x1_stale(session):
                         "model": "crm.lead", "method": "message_post",
                         "args": [[tid]],
                         "kwargs": {
-                            "body": "✍️ Write template to follow up client x1",
+                            "body": ("⏰ Khách chưa reply sau 3 ngày → chuyển về Old Lead cần Follow-up. "
+                                     "Điền follow_up_x1 (hoặc follow_up_x2 nếu đã chăm sóc lần 1) rồi kéo ticket sang Send Email to Client."),
                             "message_type": "comment",
                             "subtype_xmlid": "mail.mt_note",
                         }
@@ -596,14 +668,27 @@ def main():
         
         fb1 = detect_sender_from_user(ticket.get('user_id'))
         fb2 = detect_sender_from_reply(reply_html)
+        if not fb2:
+            fb2 = detect_sender_from_name_mention(reply_html)
+        if not fb2:
+            inbound_body = fetch_first_inbound_body(session, ticket['id'])
+            fb2 = detect_sender_from_name_mention(inbound_body)
+
+        persona_detected = bool(json_matches) or bool(fb1) or bool(fb2)
+
         for acc in [fb1, fb2, DEFAULT_SENDER]:
             if acc and acc not in accounts_to_try:
                 accounts_to_try.append(acc)
-        
+
         for acc in GMAIL_ACCOUNTS.keys():
             if acc not in accounts_to_try:
                 accounts_to_try.append(acc)
-        
+
+        if not persona_detected:
+            logger.warning(f'   ⚠️ No persona signal detected for #{ticket["id"]} — '
+                            f'defaulting to {DEFAULT_SENDER}, flagging on the lead for manual review')
+            post_sender_warning(session, ticket['id'], DEFAULT_SENDER)
+
         status = 'error'
         
         logger.info(f'\n{"="*50}')
