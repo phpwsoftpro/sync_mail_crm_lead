@@ -22,6 +22,9 @@ NEW_STAGE, JUNK_STAGE = 1, 22
 OUR_DOMAINS = ("wsoftpro.com", "hyperspacedev.com", "interstellarsagency.com", "musubiit.com")
 APPLY = "--apply" in sys.argv
 TODAY_ONLY = "--today" in sys.argv
+# --days=N limits the scan to leads created in the last N days. The scheduled job uses a small
+# window so the hourly run stays cheap; a full sweep (no flag) is for manual clean-ups.
+DAYS = next((float(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--days=")), None)
 
 def rpc(sess, model, method, args, kwargs=None):
     r = sess.post(f"{d.ODOO_CRM_URL}/web/dataset/call_kw/{model}/{method}",
@@ -35,7 +38,10 @@ def rpc(sess, model, method, args, kwargs=None):
 def main():
     sess = d.get_crm_session()
     dom = [["active", "=", True], ["stage_id", "=", NEW_STAGE]]
-    if TODAY_ONLY:
+    if DAYS:
+        dom.append(["create_date", ">=",
+                    (datetime.datetime.utcnow() - datetime.timedelta(days=DAYS)).strftime("%Y-%m-%d %H:%M:%S")])
+    elif TODAY_ONLY:
         dom.append(["create_date", ">=", datetime.datetime.utcnow().strftime("%Y-%m-%d 00:00:00")])
     leads = rpc(sess, "crm.lead", "search_read", [dom],
                 {"fields": ["id", "name", "email_from", "description"], "limit": 100000})

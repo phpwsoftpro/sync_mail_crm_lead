@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Keeps the New column clean: Odoo's own fetchmail servers (14, all mapped to crm.lead)
+         create an unclassified, untagged lead for every incoming mail that matches no thread —
+         ~46/day, straight into New. Until that auto-create is switched off, this hourly job
+         re-applies the daemon's own rules to leads created in the last 2 days and moves the junk
+         to Z - Mail Rác. Leads with a real conversation are never touched. Added 2026-09-16
+         after a one-off sweep moved 1,004 such leads out of New. -->
+    <key>Label</key>
+    <string>com.syncmail.clean_new</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/trung/syncmail-repo-auto/venv/bin/python</string>
+        <string>/Users/trung/syncmail-repo-auto/clean_new_column.py</string>
+        <string>--days=2</string>
+        <string>--apply</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/trung/syncmail-repo-auto</string>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/clean_new_column.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/clean_new_column.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/Users/trung/.local/bin</string>
+    </dict>
+</dict>
+</plist>
