@@ -20,11 +20,21 @@ import smart_mail_daemon as d
 
 NEW_STAGE, JUNK_STAGE = 1, 22
 OUR_DOMAINS = ("wsoftpro.com", "hyperspacedev.com", "interstellarsagency.com", "musubiit.com")
+# The team's own test mailboxes. Their test mails genuinely look like junk to any classifier
+# ("TMLTB", "subject để LOAN TEST"), but trung keeps those tickets to exercise the workflow —
+# never sweep them (2026-09-16: agy wanted to bin "VEE TEST MAIL 2" mid-test).
+TEST_SENDERS = ("haivan271911@gmail.com", "loann050920@gmail.com", "hoaine954@gmail.com")
 APPLY = "--apply" in sys.argv
 TODAY_ONLY = "--today" in sys.argv
 # --days=N limits the scan to leads created in the last N days. The scheduled job uses a small
 # window so the hourly run stays cheap; a full sweep (no flag) is for manual clean-ups.
 DAYS = next((float(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--days=")), None)
+# --agy: second pass with Antigravity Pro reading the FULL mail body, for leads the cheap keyword
+# rules let through (marketing blasts, "your request has been received" from unknown senders…).
+# Slow (~15 s/lead) and it shares the agy binary with the live daemon, so keep the worker count low.
+USE_AGY = "--agy" in sys.argv
+AGY_WORKERS = int(next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--workers=")), "2"))
+AGY_LIMIT = int(next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--limit=")), "10000"))
 
 def rpc(sess, model, method, args, kwargs=None):
     r = sess.post(f"{d.ODOO_CRM_URL}/web/dataset/call_kw/{model}/{method}",
@@ -64,6 +74,7 @@ def main():
             has_send_note.add(m["res_id"])
 
     junk, kept, protected = [], 0, 0
+    kept_leads = []                                 # (lead, subject, body) for the optional agy pass
     for l in leads:
         lid = l["id"]
         if lid in has_send_note or inbound_count.get(lid, 0) > 1:
@@ -72,6 +83,8 @@ def main():
         addr = frm.split("<")[-1].split(">")[0] if "<" in frm else frm
         if not addr:
             kept += 1; continue
+        if addr in TEST_SENDERS:
+            protected += 1; continue               # team test mailbox — left for manual testing
         if any(addr.endswith(x) for x in OUR_DOMAINS):
             junk.append((l, "internal domain")); continue
         if d.is_system_sender(addr):
@@ -83,6 +96,31 @@ def main():
         if lab["stage"] in d.JUNK_STAGE_KEYS:
             junk.append((l, lab["stage"])); continue
         kept += 1
+        kept_leads.append((l, subject, body[:d.AGY_BODY_MAX_CHARS]))
+
+    if USE_AGY and kept_leads:
+        from concurrent.futures import ThreadPoolExecutor
+        d.AGY_MAX_CALLS_PER_RUN = 10 ** 9          # this is a one-off sweep, not a 5-min cron cycle
+        todo = kept_leads[:AGY_LIMIT]
+        print(f"agy pass: {len(todo)} leads the keyword rules kept, {AGY_WORKERS} workers "
+              f"(~{len(todo)*15//AGY_WORKERS//60} min)", flush=True)
+        done = {"n": 0}
+
+        def judge(item):
+            l, subject, body = item
+            res = d.classify_with_agy(l.get("email_from", ""), subject, body, "clean_new_column")
+            done["n"] += 1
+            if done["n"] % 25 == 0:
+                print(f"   agy progress: {done['n']}/{len(todo)}", flush=True)
+            if res and res.get("stage") in d.JUNK_STAGE_KEYS:
+                return (l, "[agy] " + res["stage"])
+            return None
+
+        with ThreadPoolExecutor(max_workers=AGY_WORKERS) as ex:
+            for r in ex.map(judge, todo):
+                if r:
+                    junk.append(r)
+                    kept -= 1
 
     print(f"New column: {len(leads)} leads ({'today only' if TODAY_ONLY else 'all'}) | "
           f"{len(junk)} junk to move | {kept} genuine kept | {protected} protected (have client mail)", flush=True)
