@@ -138,8 +138,12 @@ def detect_sender_from_json(subject, recipient_email):
                 email_subj = (em.get('subject', '') or '').lower()
                 email_to = (em.get('to', '') or '').lower()
                 email_from = (em.get('from', '') or '').lower()
-                is_from_client = (recipient_lower in email_from or (recipient_domain and recipient_domain in email_from))
-                is_to_client = (recipient_lower in email_to or (recipient_domain and recipient_domain in email_to))
+                # EXACT address only. The old code also matched on the recipient's DOMAIN, so any
+                # client on gmail.com matched every gmail.com address cached in another persona's
+                # mailbox — on 2026-09-16 that made two test leads sent to Vanessa go out from
+                # Robert (#462759, #462760), into an unrelated old Robert thread, and land in spam.
+                is_from_client = bool(recipient_lower) and recipient_lower in email_from
+                is_to_client = bool(recipient_lower) and recipient_lower in email_to
                 if not is_from_client and not is_to_client:
                     continue
                 clean_email_subj = re.sub(r'^(re:\s*|fwd:\s*|\[.*?\]\s*)*', '', email_subj, flags=re.IGNORECASE).strip()
@@ -172,6 +176,71 @@ def load_user_mapping():
         logger.debug(f"Loaded {len(USER_TO_GMAIL)} user→Gmail mappings")
     except Exception as e:
         logger.warning(f"Failed to load user mapping: {e}")
+
+# crm.tag id -> the inbox that received the client's mail. The daemon sets exactly ONE such tag
+# per lead from the inbox the mail actually arrived in, so this is the most reliable persona
+# signal there is — stronger than the local JSON cache (stale) and than name guesses in the draft.
+TAG_TO_GMAIL = {
+    34: 'robert@wsoftpro.com',
+    35: 'vanessa@wsoftpro.com',
+    75: 'luna@hyperspacedev.com',
+    76: 'helen@interstellarsagency.com',
+}
+
+def detect_sender_from_tag(tag_ids):
+    """Persona from the lead's 'Mail <persona>' source tag (added 2026-09-16)."""
+    for tid in (tag_ids or []):
+        acc = TAG_TO_GMAIL.get(tid)
+        if acc and acc in GMAIL_ACCOUNTS:
+            return acc
+    return None
+
+def detect_sender_from_thread_owner(thread_id):
+    """The mailbox that actually owns `[thread::<id>]` — a Gmail thread id exists in exactly one
+    mailbox, so this is the most precise persona signal when the lead name carries one."""
+    if not thread_id:
+        return None
+    for acc in GMAIL_ACCOUNTS.keys():
+        try:
+            gmail_api_client.get_gmail_service(acc).users().threads().get(
+                userId="me", id=thread_id, format="minimal").execute()
+            return acc
+        except Exception:
+            continue
+    return None
+
+_live_inbox_cache = {}
+
+def detect_sender_from_live_inbox(client_email):
+    """The mailbox holding the MOST RECENT mail *from* this client — checked live in Gmail.
+
+    Ground truth for "which persona is this client actually talking to right now", and the only
+    signal that survives a client who wrote to two personas over time: on 2026-09-16 lead #462759
+    carried the 'Mail Robert' source tag (Loan had mailed Robert months earlier) while the mail
+    under reply had just arrived in Vanessa's inbox — the reply went out from Robert into the old
+    thread and landed in the client's spam. Metadata-only search, ~0.5 s per inbox, cached per run.
+    """
+    if not client_email:
+        return None
+    if client_email in _live_inbox_cache:
+        return _live_inbox_cache[client_email]
+    best, best_ts = None, -1
+    for acc in GMAIL_ACCOUNTS.keys():
+        try:
+            svc = gmail_api_client.get_gmail_service(acc)
+            res = svc.users().messages().list(
+                userId="me", q=f"from:{client_email} in:anywhere", maxResults=1).execute()
+            msgs = res.get("messages") or []
+            if not msgs:
+                continue
+            meta = svc.users().messages().get(userId="me", id=msgs[0]["id"], format="minimal").execute()
+            ts = int(meta.get("internalDate", 0))
+            if ts > best_ts:
+                best, best_ts = acc, ts
+        except Exception as e:
+            logger.debug(f"live inbox check failed for {acc}/{client_email}: {str(e)[:80]}")
+    _live_inbox_cache[client_email] = best
+    return best
 
 def detect_sender_from_user(user_id_field):
     if not user_id_field:
@@ -276,7 +345,7 @@ def fetch_tickets_to_send(session):
             ]],
             "kwargs": {
                 "fields": ["name", "email_from", "reply_email", "follow_up_x1", "follow_up_x2",
-                           "message_id", "partner_name", "user_id"],
+                           "message_id", "partner_name", "user_id", "tag_ids"],
                 "order": "id asc"
             }
         }
@@ -439,8 +508,8 @@ def post_ticket_comment(session, lead_id, to_email, reply_html, sent_time=None):
     plain_text = re.sub(r'&gt;', '>', plain_text)
     plain_text = re.sub(r'\n{3,}', '\n\n', plain_text)
     plain_text = plain_text.strip()
-    if len(plain_text) > 500:
-        plain_text = plain_text[:500] + '...'
+    # if len(plain_text) > 500:
+        # plain_text = plain_text[:500] + '...'
     comment_body = f"📧 Email sent to {to_email} at {sent_time}\n\n--- Message ---\n{plain_text}"
     try:
         res = session.post(f"{CRM_URL}/web/dataset/call_kw/crm.lead/message_post", json={
@@ -504,8 +573,12 @@ def find_threads_in_json(subject, recipient_email):
                 thread_id = email.get('thread_id', '')
                 if not thread_id:
                     continue
-                is_from_client = (recipient_lower in email_from or (recipient_domain and recipient_domain in email_from))
-                is_to_client = (recipient_lower in email_to or (recipient_domain and recipient_domain in email_to))
+                # EXACT address only. The old code also matched on the recipient's DOMAIN, so any
+                # client on gmail.com matched every gmail.com address cached in another persona's
+                # mailbox — on 2026-09-16 that made two test leads sent to Vanessa go out from
+                # Robert (#462759, #462760), into an unrelated old Robert thread, and land in spam.
+                is_from_client = bool(recipient_lower) and recipient_lower in email_from
+                is_to_client = bool(recipient_lower) and recipient_lower in email_to
                 if not is_from_client and not is_to_client:
                     continue
                 clean_email_subj = re.sub(r'^(re:\s*|fwd:\s*|\[.*?\]\s*)*', '', email_subj, flags=re.IGNORECASE).strip()
@@ -670,17 +743,19 @@ def main():
             continue
 
         accounts_to_try = []
-        
-        logger.info(f'   🔍 Searching synced email JSONs for thread...')
-        json_matches = find_threads_in_json(clean_subject, to_email)
-        if json_matches:
-            best_match = json_matches[0][0]
-            if not thread_id:
-                thread_id = best_match['thread_id']
-            for m, score in json_matches:
-                if m['account'] not in accounts_to_try:
-                    accounts_to_try.append(m['account'])
-        
+
+        # Priority order (reworked 2026-09-16 after #462759/#462760 went out from the wrong persona):
+        #   owner    -> mailbox owning [thread::id] from the lead name (most precise when present)
+        #   live     -> mailbox with the newest mail FROM this client (ground truth, checked in Gmail)
+        #   fb0 source tag  -> the inbox that actually received the client's mail (set by the daemon)
+        #   fb1 user_id     -> persona pinned on the lead by a human
+        #   fb2 draft hints -> persona email/domain or first name written in the draft
+        #   json cache      -> local emails/gmail_*.json, often stale; LAST resort before the default
+        # The JSON cache used to come first AND injected its thread id; a stale/foreign match there
+        # sent a reply from the wrong mailbox into an unrelated old thread (→ client's spam folder).
+        owner = detect_sender_from_thread_owner(thread_id)
+        live = detect_sender_from_live_inbox(to_email)
+        fb0 = detect_sender_from_tag(ticket.get('tag_ids'))
         fb1 = detect_sender_from_user(ticket.get('user_id'))
         fb2 = detect_sender_from_reply(reply_html)
         if not fb2:
@@ -689,9 +764,20 @@ def main():
             inbound_body = fetch_first_inbound_body(session, ticket['id'])
             fb2 = detect_sender_from_name_mention(inbound_body)
 
-        persona_detected = bool(json_matches) or bool(fb1) or bool(fb2)
+        logger.info(f'   🔍 Searching synced email JSONs for thread...')
+        json_matches = find_threads_in_json(clean_subject, to_email)
+        json_accounts = []
+        for m, score in json_matches:
+            if m['account'] not in json_accounts:
+                json_accounts.append(m['account'])
 
-        for acc in [fb1, fb2, DEFAULT_SENDER]:
+        persona_detected = bool(owner) or bool(live) or bool(fb0) or bool(fb1) or bool(fb2) or bool(json_matches)
+        logger.info(f'   🧭 Persona signals: thread_owner={owner or "-"} live={live or "-"} tag={fb0 or "-"} '
+                    f'user_id={fb1 or "-"} draft={fb2 or "-"} json={json_accounts[0] if json_accounts else "-"}')
+        if live and fb0 and live != fb0:
+            logger.warning(f'   ⚠️ Source tag says {fb0} but the newest client mail is in {live} — using {live}')
+
+        for acc in [owner, live, fb0, fb1, fb2] + json_accounts + [DEFAULT_SENDER]:
             if acc and acc not in accounts_to_try:
                 accounts_to_try.append(acc)
 
