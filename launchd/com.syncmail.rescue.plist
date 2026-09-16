@@ -18,7 +18,7 @@
     <key>WorkingDirectory</key>
     <string>/Users/trung/syncmail-repo-auto</string>
     <key>StartInterval</key>
-    <integer>600</integer>
+    <integer>300</integer>
     <key>RunAtLoad</key>
     <false/>
     <key>StandardOutPath</key>
