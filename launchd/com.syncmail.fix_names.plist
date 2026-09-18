@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Đổi tên lead "Email thread for <email>" thành "<subject> [thread::<id>]", mỗi 30 phút.
+         Nguồn: addon Odoo `disable_contact_email_notify` ghi đè message_route() và tự tạo lead
+         với cái tên vô nghĩa đó (không subject, không thread id → sender phải ĐOÁN persona,
+         đúng nguyên nhân #463156 gửi nhầm từ Robert). Đây là lưới an toàn cho tới khi addon
+         được vá; khi không còn lead nào khớp thì job chạy vài giây rồi thoát. Thêm 18/09/2026. -->
+    <key>Label</key>
+    <string>com.syncmail.fix_names</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/trung/syncmail-repo-auto/venv/bin/python</string>
+        <string>/Users/trung/syncmail-repo-auto/fix_lead_names.py</string>
+        <string>--apply</string>
+        <string>--workers=2</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/trung/syncmail-repo-auto</string>
+    <key>StartInterval</key>
+    <integer>1800</integer>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/fix_lead_names.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/fix_lead_names.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/Users/trung/.local/bin</string>
+    </dict>
+</dict>
+</plist>
