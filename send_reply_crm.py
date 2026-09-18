@@ -224,7 +224,7 @@ def detect_sender_from_live_inbox(client_email):
         return None
     if client_email in _live_inbox_cache:
         return _live_inbox_cache[client_email]
-    best, best_ts = None, -1
+    best, best_ts, failed = None, -1, []
     for acc in GMAIL_ACCOUNTS.keys():
         try:
             svc = gmail_api_client.get_gmail_service(acc)
@@ -238,7 +238,15 @@ def detect_sender_from_live_inbox(client_email):
             if ts > best_ts:
                 best, best_ts = acc, ts
         except Exception as e:
-            logger.debug(f"live inbox check failed for {acc}/{client_email}: {str(e)[:80]}")
+            failed.append(acc)
+            logger.warning(f"   live inbox check FAILED for {acc}: {str(e)[:70]}")
+    # A partial answer must never pick the persona: if one mailbox times out ("No route to host"
+    # happens on this network), the remaining ones win by default and the reply goes out from the
+    # wrong address. 2026-09-18, #463156: the whole conversation was in Vanessa's box, Vanessa's
+    # check failed, so `live` said Robert and the client got the reply from Robert.
+    if failed:
+        logger.warning(f"   ⚠️ live inbox check incomplete ({len(failed)} mailbox(es) unreachable) — ignoring the live signal")
+        best = None
     _live_inbox_cache[client_email] = best
     return best
 
@@ -774,10 +782,19 @@ def main():
         persona_detected = bool(owner) or bool(live) or bool(fb0) or bool(fb1) or bool(fb2) or bool(json_matches)
         logger.info(f'   🧭 Persona signals: thread_owner={owner or "-"} live={live or "-"} tag={fb0 or "-"} '
                     f'user_id={fb1 or "-"} draft={fb2 or "-"} json={json_accounts[0] if json_accounts else "-"}')
-        if live and fb0 and live != fb0:
+
+        # Two independent signals agreeing beat one heuristic. On 2026-09-18 (#463156) the source
+        # tag AND the draft both said Vanessa — where the whole client thread lives — but `live`
+        # (a single mailbox scan, and that run's scan was incomplete) said Robert and won, so the
+        # client got the reply from the wrong address. Order now:
+        #   thread owner (exact) > human pin > tag+draft consensus > live > tag > draft > cache.
+        consensus = fb0 if (fb0 and fb2 and fb0 == fb2) else None
+        if consensus:
+            logger.info(f'   ✅ Tag and draft agree on {consensus} — using it')
+        elif live and fb0 and live != fb0:
             logger.warning(f'   ⚠️ Source tag says {fb0} but the newest client mail is in {live} — using {live}')
 
-        for acc in [owner, live, fb0, fb1, fb2] + json_accounts + [DEFAULT_SENDER]:
+        for acc in [owner, fb1, consensus, live, fb0, fb2] + json_accounts + [DEFAULT_SENDER]:
             if acc and acc not in accounts_to_try:
                 accounts_to_try.append(acc)
 
