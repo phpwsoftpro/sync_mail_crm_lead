@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.syncmail.autopilot</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/trung/syncmail-repo-auto/start_auto_pilot.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>/Users/trung/syncmail-repo-auto</string>
+    <key>StandardOutPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/launchd.log</string>
+</dict>
+</plist>
