@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Canary: every 15 min verify the inbound daemon, the sender and the bridge are alive; kill a
+         daemon run hung > 25 min; alert on Odoo channel 188. Added 21/09/2026 after the daemon hung
+         unnoticed for 3 days. -->
+    <key>Label</key>
+    <string>com.syncmail.canary</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/trung/syncmail-repo-auto/venv/bin/python</string>
+        <string>/Users/trung/syncmail-repo-auto/daemon_canary.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/trung/syncmail-repo-auto</string>
+    <key>StartInterval</key>
+    <integer>900</integer>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/canary.launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/canary.launchd.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>
