@@ -700,7 +700,9 @@ def process_inbox(account, processed):
         # minutes of arrival, so an unread-only query silently skipped every client reply that
         # fetchmail (or a human) opened first (#462037: two VESLOG replies never seen by this
         # daemon, ticket stuck in Send Email Done). Dedupe relies on the processed-id file instead.
-        query = "newer_than:2d"
+        # SMART_MAIL_QUERY lets a one-off run widen the window (e.g. "newer_than:4d" after an outage);
+        # the processed-id cache makes re-scanning safe. Default unchanged.
+        query = os.environ.get("SMART_MAIL_QUERY", "newer_than:2d")
         messages = []
         page_token = None
         while True:
