@@ -91,6 +91,59 @@ STAGE_OLD_LEAD_FOLLOWUP = 34   # "Old Lead cần Follow-up" — workflow #462027
 DRY_RUN = "--send" not in sys.argv and "--auto" not in sys.argv
 AUTO_MODE = "--auto" in sys.argv
 
+def _load_env_file(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")):
+    """launchd passes only PATH; pull the bridge/callback settings from .env (never overrides real env)."""
+    try:
+        for line in open(path, encoding="utf-8"):
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+    except FileNotFoundError:
+        pass
+_load_env_file()
+
+# 2026-09-21 — admin.wsoftpro.com <-> sender bridge (Fable). Three opt-in additions:
+#   --lead=<odoo id>  send exactly ONE ticket (it must still be in stage 7 with a draft — same guards,
+#                     same persona logic; nothing is bypassed). Used by sender_bridge.py.
+#   process lock      this script had NO lock — it was safe only because launchd ran a single
+#                     instance every 300 s. With on-demand runs, two instances could both see the
+#                     same stage-7 ticket → the client gets the mail twice. flock serialises them:
+#                     a --lead run waits (<=180 s) for an in-flight --auto run; an --auto run that
+#                     finds the lock held simply exits (the holder drains the queue; next tick in 5 min).
+#   callback          after each ticket, POST the outcome (persona, thread, stage) to admin_wsp so
+#                     it knows at once instead of waiting for the next 5-min chatter sync.
+#                     Best-effort: ADMIN_WSP_CALLBACK_URL unset or admin down -> one log line, nothing else.
+ONLY_LEAD = next((int(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--lead=")), None)
+LOCK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".send_reply.lock")
+_lock_fh = None
+
+def acquire_send_lock():
+    global _lock_fh
+    import fcntl
+    _lock_fh = open(LOCK_PATH, "w")
+    deadline = time.time() + (180 if ONLY_LEAD else 0)
+    while True:
+        try:
+            fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _lock_fh.write(f"{os.getpid()} {datetime.now():%Y-%m-%d %H:%M:%S} {' '.join(sys.argv[1:])}\n")
+            _lock_fh.flush()
+            return True
+        except OSError:
+            if time.time() >= deadline:
+                return False
+            time.sleep(2)
+
+def notify_admin_wsp(payload):
+    url, token = os.environ.get("ADMIN_WSP_CALLBACK_URL"), os.environ.get("ADMIN_WSP_CALLBACK_TOKEN")
+    if not url or not token:
+        return
+    try:
+        r = requests.post(url, json=payload, headers={"Authorization": f"Bearer {token}"}, timeout=5)
+        logger.info(f"   📡 admin_wsp callback: HTTP {r.status_code}")
+    except Exception as e:
+        logger.warning(f"   📡 admin_wsp callback failed (ignored): {str(e)[:120]}")
+
 def detect_sender_from_reply(reply_html):
     if not reply_html:
         return DEFAULT_SENDER
@@ -358,7 +411,10 @@ def fetch_tickets_to_send(session):
             }
         }
     })
-    return res.json().get("result", [])
+    tickets = res.json().get("result", [])
+    if ONLY_LEAD is not None:
+        tickets = [t for t in tickets if t["id"] == ONLY_LEAD]
+    return tickets
 
 def fetch_first_inbound_body(session, lead_id):
     """Fetch the client's earliest inbound email body on this lead, so name
@@ -684,6 +740,9 @@ def send_api_reply(thread_id, to_email, reply_html, subject, sender_email=None):
 
 def main():
     start_time = datetime.now()
+    if not acquire_send_lock():
+        logger.info('🔒 Another sender run holds the lock — exiting (it will drain the queue).')
+        return
     mode_str = '🤖 AUTO' if AUTO_MODE else ('🔴 DRY RUN' if DRY_RUN else '🟢 SENDING')
     
     logger.info('=' * 60)
@@ -859,6 +918,9 @@ def main():
             
             clear_email_field(session, ticket['id'], email_field)
             logger.info(f'   🧹 Cleared {email_field} field')
+            notify_admin_wsp({"lead_id": ticket['id'], "status": "sent", "persona": try_email,
+                              "thread_id": thread_id, "to_email": to_email, "field": email_field,
+                              "stage_id": dest_stage, "sent_at": sent_time})
         else:
             failed_count += 1
             fail_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -866,6 +928,9 @@ def main():
             
             logger.info(f'   ↩️ Moving to Unable to Send Email...')
             error_stage = get_error_stage(session)
+            notify_admin_wsp({"lead_id": ticket['id'], "status": "failed", "persona": try_email,
+                              "thread_id": thread_id, "to_email": to_email, "field": email_field,
+                              "stage_id": error_stage, "sent_at": fail_time})
             if move_to_stage(session, ticket['id'], error_stage):
                 logger.info(f'   ✅ Moved to Unable to Send Email')
             else:

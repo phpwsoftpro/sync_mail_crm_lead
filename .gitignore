@@ -43,3 +43,4 @@ Thumbs.db
 # IDE
 .idea/
 .vscode/
+.send_reply.lock
