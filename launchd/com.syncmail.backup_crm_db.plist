@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Nightly pg_dump of CRM DB 27_05 to /Users/trung/CRM-Internal/backups (14 days kept).
+         Added 21/09/2026 after a mistaken ticket merge could not be undone — there was no backup. -->
+    <key>Label</key>
+    <string>com.syncmail.backup_crm_db</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/trung/syncmail-repo-auto/backup_crm_db.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/backup_crm_db.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/trung/syncmail-repo-auto/logs/backup_crm_db.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+</dict>
+</plist>
