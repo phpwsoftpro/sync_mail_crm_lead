@@ -703,6 +703,12 @@ def process_inbox(account, processed):
         # SMART_MAIL_QUERY lets a one-off run widen the window (e.g. "newer_than:4d" after an outage);
         # the processed-id cache makes re-scanning safe. Default unchanged.
         query = os.environ.get("SMART_MAIL_QUERY", "newer_than:2d")
+        # 2026-09-21: the listing below stops at 300 messages, and vanessa@ alone receives 300+
+        # mails a DAY, most of them from our own domains (skipped below as internal_skip anyway).
+        # With them in the list, "300 newest" reached back only ~20 h, so during the 3-day outage
+        # catch-up 82 external mails older than that were never even listed. Exclude our own
+        # senders in the query itself so the 300 slots hold only mail we would actually process.
+        query += " -from:wsoftpro.com -from:hyperspacedev.com -from:interstellarsagency.com -from:musubiit.com"
         messages = []
         page_token = None
         while True:
