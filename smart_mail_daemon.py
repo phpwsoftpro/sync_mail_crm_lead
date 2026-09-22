@@ -81,6 +81,7 @@ CRM_STAGES = {
 NEW_STAGE_ID = 1
 REPLY_CLIENT_STAGE_ID = 3
 JUNK_STAGE_ID = 22
+REPLY_STAGE_ID_FOR_NEW = 3   # Reply Client — where a brand-new lead goes when the mail is a human reply
 JUNK_STAGE_KEYS = {
     "recruiter_spam", "spam_auto_replies", "auto_acknowledge",
     "job_applications", "job_auto_ooo", "bounces_errors",
@@ -642,7 +643,11 @@ def create_or_update_lead(session, sender, subject, body_text, body_html, is_jun
             })
         return lead_id, action, stage_name
 
-    stage_id = JUNK_STAGE_ID if is_junk else NEW_STAGE_ID
+    # 2026-09-22: a mail agy classified as a genuine human reply (is_reply) but whose sender has no
+    # ticket yet (a reply to a cold outreach — FidesIQ #463418) used to be created in New, where
+    # nobody looked for it; trung: "ticket này đâu, không thấy trong cột Reply Client". A reply
+    # IS the team's work queue, so create it straight in Reply Client. Plain new inquiries stay in New.
+    stage_id = JUNK_STAGE_ID if is_junk else (REPLY_STAGE_ID_FOR_NEW if is_reply else NEW_STAGE_ID)
     stage_name = "Z - Mail Rác" if is_junk else "New"
     lead_vals = {
         "name": subject[:100],
