@@ -598,7 +598,12 @@ def post_ticket_comment(session, lead_id, to_email, reply_html, sent_time=None):
         return False
 
 def extract_thread_id(name):
-    match = re.search(r'thread::([^\s\]]+)', name or '')
+    # 2026-09-23: only a real Gmail thread id (16 hex chars) counts. A client's own subject can
+    # carry "[ thread::WzJBmjvAeB-ORWCZMyqWlzU:: ]" (their ticket system's id — Milan Laser
+    # #463487); the addon copied it into the lead name, we sent it to Gmail and got HTTP 400
+    # "Invalid id" in every mailbox -> Unable to Send. Anything else is ignored so the normal
+    # thread search by client address runs instead.
+    match = re.search(r'thread::([0-9a-f]{16})\b', name or '')
     if match:
         tid = match.group(1).rstrip(':').strip()
         return tid
@@ -903,6 +908,7 @@ def main():
         if status == 'sent':
             sent_count += 1
             sent_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            sent_at_iso = datetime.now().astimezone().isoformat(timespec="seconds")  # tz-aware for admin_wsp
             
             logger.info(f'   📋 Moving to {stage_label}...')
             if move_to_stage(session, ticket['id'], dest_stage):
@@ -920,17 +926,18 @@ def main():
             logger.info(f'   🧹 Cleared {email_field} field')
             notify_admin_wsp({"lead_id": ticket['id'], "status": "sent", "persona": try_email,
                               "thread_id": thread_id, "to_email": to_email, "field": email_field,
-                              "stage_id": dest_stage, "sent_at": sent_time})
+                              "stage_id": dest_stage, "sent_at": sent_at_iso})
         else:
             failed_count += 1
             fail_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            fail_at_iso = datetime.now().astimezone().isoformat(timespec="seconds")
             logger.error(f'   ❌ Failed to send #{ticket["id"]} to {to_email}')
             
             logger.info(f'   ↩️ Moving to Unable to Send Email...')
             error_stage = get_error_stage(session)
             notify_admin_wsp({"lead_id": ticket['id'], "status": "failed", "persona": try_email,
                               "thread_id": thread_id, "to_email": to_email, "field": email_field,
-                              "stage_id": error_stage, "sent_at": fail_time})
+                              "stage_id": error_stage, "sent_at": fail_at_iso})
             if move_to_stage(session, ticket['id'], error_stage):
                 logger.info(f'   ✅ Moved to Unable to Send Email')
             else:

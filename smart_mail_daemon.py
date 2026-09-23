@@ -650,7 +650,9 @@ def create_or_update_lead(session, sender, subject, body_text, body_html, is_jun
     stage_id = JUNK_STAGE_ID if is_junk else (REPLY_STAGE_ID_FOR_NEW if is_reply else NEW_STAGE_ID)
     stage_name = "Z - Mail Rác" if is_junk else "New"
     lead_vals = {
-        "name": subject[:100],
+        # 2026-09-23: strip a foreign "[ thread::… ]" the CLIENT put in their subject (their ticket
+        # system) — it is not our Gmail marker and would break the sender (#463487).
+        "name": re.sub(r"\s*\[\s*thread::[^\]]*\]", "", subject).strip()[:100],
         "email_from": email_from,
         "contact_name": contact_name,
         "description": (body_text or "")[:1000],
