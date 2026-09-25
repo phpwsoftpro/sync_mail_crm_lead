@@ -68,7 +68,11 @@ CRM_PASS = ENV.get("CRM_PASSWORD", "")
 CRM_DB = ENV.get("CRM_DB", "")
 
 GMAIL_ACCOUNTS = {}
-for key_prefix in ['ROBERT', 'VANESSA', 'LUNA', 'HELEN']:
+# 2026-09-25: + SUPPORTTEAM / YUNA / JENNIFER. smart_mail_daemon creates tickets from all 7 Gmail
+# inboxes (source tags 84/82/85), but this sender only knew the four sales personas, so a reply on a
+# ticket whose thread lives in supportteam@ (Netenders invoice #462525) got HTTP 404 in every
+# mailbox it tried and landed in Unable to Send. Same service-account credentials, same code path.
+for key_prefix in ['ROBERT', 'VANESSA', 'LUNA', 'HELEN', 'SUPPORTTEAM', 'YUNA', 'JENNIFER']:
     email = ENV.get(f'GMAIL_{key_prefix}_EMAIL', '')
     name = ENV.get(f'GMAIL_{key_prefix}_NAME', key_prefix.capitalize())
     if email:
@@ -238,6 +242,9 @@ TAG_TO_GMAIL = {
     35: 'vanessa@wsoftpro.com',
     75: 'luna@hyperspacedev.com',
     76: 'helen@interstellarsagency.com',
+    82: 'yuna@musubiit.com',              # 2026-09-25
+    84: 'supportteam@wsoftpro.com',       # 2026-09-25
+    85: 'jennifer@hyperspacedev.com',     # 2026-09-25
 }
 
 def detect_sender_from_tag(tag_ids):

@@ -26,7 +26,7 @@ LIMIT = int(next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--limit=
 WORKERS = int(next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--workers=")), "3"))
 TAG_TO_ACCOUNT = {34: "robert@wsoftpro.com", 35: "vanessa@wsoftpro.com",
                   75: "luna@hyperspacedev.com", 76: "helen@interstellarsagency.com",
-                  82: "yuna@musubiit.com"}
+                  82: "yuna@musubiit.com", 84: "supportteam@wsoftpro.com", 85: "jennifer@hyperspacedev.com"}
 _tls = threading.local()
 
 def svc(acct):
